@@ -1,23 +1,22 @@
-# Title
+# Operator learning in PINN
 
-<!-- Change `kisnikser/m1p-template` to `intsystems/your-repository`-->
-[![License](https://badgen.net/github/license/kisnikser/m1p-template?color=green)](https://github.com/kisnikser/m1p-template/blob/main/LICENSE)
-[![GitHub Contributors](https://img.shields.io/github/contributors/kisnikser/m1p-template)](https://github.com/kisnikser/m1p-template/graphs/contributors)
-[![GitHub Issues](https://img.shields.io/github/issues-closed/kisnikser/m1p-template.svg?color=0088ff)](https://github.com/kisnikser/m1p-template/issues)
-[![GitHub Pull Requests](https://img.shields.io/github/issues-pr-closed/kisnikser/m1p-template.svg?color=7f29d6)](https://github.com/kisnikser/m1p-template/pulls)
+[![License](https://badgen.net/github/license/rknzhl/PINN-Operator-Learning?color=green)](https://github.com/rknzhl/PINN-Operator-Learning/blob/main/LICENSE)
+[![GitHub Contributors](https://img.shields.io/github/contributors/rknzhl/PINN-Operator-Learning)](https://github.com/rknzhl/PINN-Operator-Learning/graphs/contributors)
+[![GitHub Issues](https://img.shields.io/github/issues-closed/rknzhl/PINN-Operator-Learning.svg?color=0088ff)](https://github.com/rknzhl/PINN-Operator-Learning/issues)
+[![GitHub Pull Requests](https://img.shields.io/github/issues-pr-closed/rknzhl/PINN-Operator-Learning.svg?color=7f29d6)](https://github.com/rknzhl/PINN-Operator-Learning/pulls)
 
 <table>
     <tr>
         <td align="left"> <b> Author </b> </td>
-        <td> Name Surname </td>
+        <td> Rodion Akinzhala</td>
     </tr>
     <tr>
         <td align="left"> <b> Consultant </b> </td>
-        <td> Name Surname, PhD/DSc </td>
+        <td> Alexander Terentyev </td>
     </tr>
     <tr>
         <td align="left"> <b> Advisor </b> </td>
-        <td> Name Surname, PhD/DSc </td>
+        <td>  Vadim Strijov, DSc</td>
     </tr>
 </table>
 
