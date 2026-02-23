@@ -1,9 +1,9 @@
 # Operator learning in PINN
 
-[![License](https://badgen.net/github/license/rknzhl/PINN-Operator-Learning?color=green)](https://github.com/rknzhl/PINN-Operator-Learning/blob/main/LICENSE)
-[![GitHub Contributors](https://img.shields.io/github/contributors/rknzhl/PINN-Operator-Learning)](https://github.com/rknzhl/PINN-Operator-Learning/graphs/contributors)
-[![GitHub Issues](https://img.shields.io/github/issues-closed/rknzhl/PINN-Operator-Learning.svg?color=0088ff)](https://github.com/rknzhl/PINN-Operator-Learning/issues)
-[![GitHub Pull Requests](https://img.shields.io/github/issues-pr-closed/rknzhl/PINN-Operator-Learning.svg?color=7f29d6)](https://github.com/rknzhl/PINN-Operator-Learning/pulls)
+[![License](https://badgen.net/github/license/intsystems/PINN-Operator-Learning?color=green)](https://github.com/intsystems/PINN-Operator-Learning/blob/main/LICENSE)
+[![GitHub Contributors](https://img.shields.io/github/contributors/intsystems/PINN-Operator-Learning)](https://github.com/intsystems/PINN-Operator-Learning/graphs/contributors)
+[![GitHub Issues](https://img.shields.io/github/issues-closed/intsystems/PINN-Operator-Learning.svg?color=0088ff)](https://github.com/intsystems/PINN-Operator-Learning/issues)
+[![GitHub Pull Requests](https://img.shields.io/github/issues-pr-closed/intsystems/PINN-Operator-Learning.svg?color=7f29d6)](https://github.com/intsystems/PINN-Operator-Learning/pulls)
 
 <table>
     <tr>
