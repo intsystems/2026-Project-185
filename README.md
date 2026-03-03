@@ -1,4 +1,4 @@
-# TEMPO — Expectation-Maximization based Mixture-of-PODs
+# TEMPO: Regime-Aware Operator Learning with Locally Adapted POD Bases
 -----
 
 [![License](https://badgen.net/github/license/intsystems/2026-Project-185?color=green)](https://github.com/intsystems/2026-Project-185/blob/main/LICENSE)
