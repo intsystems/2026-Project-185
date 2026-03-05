@@ -30,11 +30,11 @@
 
 ## Abstract
 
-Operator learning methods for partial differential equations based on Deep Operator Networks have been substantially improved by POD-DeepONet, which replaces the learned trunk network with precomputed proper orthogonal decomposition bases derived from solution snapshots. However, POD-DeepONet employs a single global basis shared across the entire solution space, which proves insufficient when solutions exhibit regime-dependent behavior such as laminar-turbulent transitions or diffusion-reaction regime changes. 
+POD-DeepONet improves upon Deep Operator Networks for partial differential equations by replacing the trunk network with proper orthogonal decomposition bases, but its single global basis proves insufficient for solutions with regime-dependent behavior.
 
-We propose TEMPO — an extension of POD-DeepONet that automatically discovers dynamical regimes via Expectation-Maximization in a low-dimensional POD coefficient space. Each mixture component yields a locally optimal basis tailored to its regime, while a learned gating network maps input parameters to probabilistic mixture weights at inference, coordinating an ensemble of specialized branch networks for smooth transitions across regimes.
+We propose TEMPO, which discovers dynamical regimes via Expectation-Maximization in a low-dimensional POD coefficient space. Each mixture component constructs a locally optimal Neural-POD basis, while a learned gating network coordinates specialized branch networks via probabilistic mixture weights for smooth regime transitions.
 
-We validate TEMPO on benchmark partial differential equations exhibiting multi-regime phenomena, demonstrating that regime-aware basis adaptation yields systematic accuracy improvements over POD-DeepONet on complex multi-regime operators.
+Experiments on a range of multi-regime benchmarks demonstrate that automatic regime discovery with Neural-POD bases yields substantial accuracy gains over a single global basis.
 
 ## Keywords
 Operator learning, DeepONet, Proper Orthogonal Decomposition, Expectation-Maximization, Gaussian mixture models, Regime discovery
