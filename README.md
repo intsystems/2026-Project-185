@@ -30,26 +30,10 @@
 
 ## Abstract
 
-POD-DeepONet improves upon Deep Operator Networks for partial differential equations by replacing the trunk network with proper orthogonal decomposition bases, but its single global basis proves insufficient for solutions with regime-dependent behavior.
+Operator learning methods typically approximate the solution map of a physical system with a single global model — an assumption that fails when solutions change character fundamentally across the parameter space.
 
-We propose TEMPO, which discovers dynamical regimes via Expectation-Maximization in a low-dimensional POD coefficient space. Each mixture component constructs a locally optimal Neural-POD basis, while a learned gating network coordinates specialized branch networks via probabilistic mixture weights for smooth regime transitions.
-
-Experiments on a range of multi-regime benchmarks demonstrate that automatic regime discovery with Neural-POD bases yields substantial accuracy gains over a single global basis.
+We propose TEMPO: a framework that identifies latent dynamical regimes in snapshot data via Expectation-Maximization, builds a dedicated Neural-POD basis for each, and learns to route new inputs to the right regime at inference time. On multi-regime benchmarks, TEMPO achieves substantially lower errors than POD-DeepONet and vanilla DeepONet, with interpretable structure that reflects the underlying physics.
 
 ## Keywords
 Operator learning, DeepONet, Proper Orthogonal Decomposition, Expectation-Maximization, Gaussian mixture models, Regime discovery
 
-## Citation
-
-If you find our work helpful, please cite us.
-```BibTeX
-@article{citekey,
-    title={Title},
-    author={Name Surname, Name Surname (consultant), Name Surname (advisor)},
-    year={2025}
-}
-```
-
-## Licence
-
-Our project is MIT licensed. See [LICENSE](LICENSE) for details.

@@ -1,7 +1,8 @@
 \documentclass{article}
 
 \PassOptionsToPackage{numbers, sort, compress}{natbib}
-\usepackage[main,final]{neurips_2025}
+\usepackage{neurips_2025}
+\nolinenumbers
 
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -70,19 +71,7 @@
 % \AND instead of \And before the third author name.
 
 
-\author{
-  Rodion Akinzhala\\
-  MIPT\\
-  Moscow, Russia\\
-  \And
-  Alexander Terentyev\\
-  MIPT\\
-  Moscow, Russia\\
-  \And
-  Vadim Strijov\\
-  MIPT\\
-  Moscow, Russia\\
-}
+
 
 
 \begin{document}
@@ -92,11 +81,9 @@
 
 \begin{abstract}
 
-POD-DeepONet improves upon Deep Operator Networks for partial differential equations by replacing the trunk network with proper orthogonal decomposition bases, but its single global basis proves insufficient for solutions with regime-dependent behavior.
+Operator learning methods typically approximate the solution map of a physical system with a single global model — an assumption that fails when solutions change character fundamentally across the parameter space.
 
-We propose TEMPO, which discovers dynamical regimes via Expectation-Maximization in a low-dimensional POD coefficient space. Each mixture component constructs a locally optimal Neural-POD basis, while a learned gating network coordinates specialized branch networks via probabilistic mixture weights for smooth regime transitions.
-
-Experiments on a range of multi-regime benchmarks demonstrate that automatic regime discovery with Neural-POD bases yields substantial accuracy gains over a single global basis.
+We propose TEMPO: a framework that identifies latent dynamical regimes in snapshot data via Expectation-Maximization, builds a dedicated Neural-POD basis for each, and learns to route new inputs to the right regime at inference time. On multi-regime benchmarks, TEMPO achieves substantially lower errors than POD-DeepONet and vanilla DeepONet, with interpretable structure that reflects the underlying physics.
 
 \end{abstract}
 
@@ -123,55 +110,61 @@ In this work, we propose \textbf{TEMPO} (\textit{Regime-Aware Operator Learning 
 
 \section{Problem Statement}
 
-Let $\Omega \subset \R^d$ be a bounded spatial domain, $\T \subset \R_{\geq 0}$ a time interval, and $\cK \subset \R^{d_\kappa}$ a physical parameter space.
+The behavior of many physical systems is governed by a set of parameters $\kappa \in \cK \subset \R^{d_\kappa}$: viscosity controls whether flow is laminar or turbulent, boundary forcing shapes wave patterns, material coefficients determine whether stress propagates smoothly or develops shocks. As $\kappa$ varies across the parameter space $\cK$, the corresponding solutions can change not just quantitatively but qualitatively, demanding fundamentally different representations in each regime. Predicting these solutions accurately and instantly, without re-running the underlying simulator, is the central problem we address.
 
-\begin{definition}[Parametric solution operator]
-\label{def:operator}
-Let $\mathcal{U} = L^2(\Omega)$ be the space of input functions and $\mathcal{V} = L^2(\Omega \times \T)$ the space of solutions. A parametric PDE with input $u \in \mathcal{U}$ and physical parameter $\kappa \in \cK$ defines a solution $s(\cdot,\cdot; u, \kappa) \in \mathcal{V}$. The \emph{solution operator}
-$\cG: \mathcal{U} \times \cK \to \mathcal{V}$ is defined by
-\[
-  \cG(u, \kappa) \;=\; s(\,\cdot\,,\,\cdot\,;\,u,\kappa).
-\]
-\end{definition}
+Let $\Omega \subset \R^d$ be a bounded spatial domain and $\T \subset \R_{\geq 0}$ a time interval.
 
-In practice, $\cG$ is unknown and expensive to evaluate: each query requires solving the full PDE numerically. We are given instead a finite dataset of $N$ solution snapshots
+We are given a dataset of $N$ solution snapshots:
 \begin{equation}
-  \cD \;=\; \bigl\{\,(t^{(i)},\;\kappa^{(i)},\;s^{(i)})\,\bigr\}_{i=1}^{N},
+  \cD = \bigl\{\,(u^{(i)},\,\kappa^{(i)},\,t^{(i)},\,s^{(i)})\,\bigr\}_{i=1}^{N},
   \qquad
-  s^{(i)}(\cdot) \;=\; s\!\left(\cdot,\,t^{(i)};\,\kappa^{(i)}\right) \in L^2(\Omega),
+  s^{(i)}(\cdot) = s\!\left(\cdot,\,t^{(i)};\,u^{(i)},\kappa^{(i)}\right)
+  \in L^2(\Omega),
   \label{eq:dataset}
 \end{equation}
+where $u^{(i)} \in \mathcal{U} = L^2(\Omega)$ is the input function, $\kappa^{(i)} \in \cK$ the physical parameter, $t^{(i)} \in \T$ the observation time, and $s^{(i)}$ the corresponding solution discretized on $N_y$ quadrature points $\{(x_j, w_j)\}_{j=1}^{N_y}$ with norm $\normsq{f} = \sum_j w_j f(x_j)^2$.
 
-each observed at a single time $t^{(i)} \in \T$ under parameter $\kappa^{(i)} \in \cK$ and discretized on $N_y$ quadrature points $\{(x_j, w_j)\}_{j=1}^{N_y} \subset \Omega \times \R_{>0}$, with discrete $L^2$-norm $\normsq{f} = \sum_j w_j f(x_j)^2$.
 
-The \emph{operator learning problem} is to construct an approximation $\hat{\cG} \approx \cG$ from $\cD$ alone, such that $\hat{\cG}(\kappa)$ accurately predicts $s(\cdot,t;\kappa)$ for unseen parameters $\kappa \notin \{\kappa^{(i)}\}$ and times $t \in \T$, without solving the PDE numerically.
+The dataset $\cD$ captures $\cG$ through a finite collection of snapshots; the underlying operator is defined as follows.
+
+\begin{definition}[Solution operator]
+\label{def:operator}
+The \emph{solution operator}
+ \[ \cG: \mathcal{U} \times \cK \to L^2(\Omega \times \T) \]
+maps each pair $(u,\kappa)$ to the full space-time solution:
+$\cG(u,\kappa) = s(\,\cdot\,,\,\cdot\,;\,u,\kappa)$.
+\end{definition}
+
+
+The operator $\cG$ is unknown and expensive to evaluate directly. The \emph{operator learning problem} is to construct $\hat{\cG} \approx \cG$ from $\cD$ alone, generalizing to unseen $(u,\kappa) \notin \cD$ without solving the PDE.
+
+
+
 
 
 \subsection*{The multi-regime assumption}
 
-Classical operator learning approaches approximate $\cG$ with a single global model. This fails when solutions exhibit qualitatively distinct behaviors across $\cK$: laminar vs.\ turbulent flow etc. In each case, the optimal low-dimensional representation differs across the parameter space, and no single basis captures all regimes accurately. We formalize this via a latent variable model. 
+When solutions change character fundamentally across $\cK$, the optimal low-dimensional representation differs from regime to regime, and no single global basis captures the full solution diversity. We formalize this observation via a latent variable model over the snapshot ensemble.
 
 \begin{definition}[Generative model]
 \label{def:generative}
-Each snapshot is drawn from a mixture of $M$ regime-specific components:
-\begin{align}
-  z_i &\sim \mathrm{Cat}(\pi_1,\ldots,\pi_M),
-  \qquad \pi_m \geq 0,\quad \textstyle\sum_m \pi_m = 1,
-  \label{eq:prior}\\[4pt]
-\end{align}
-\begin{align}
-  s^{(i)} \mid z_i{=}m &\sim
+Each snapshot arises from one of $M$ latent regimes. The regime label $z_i \in \{1,\ldots,M\}$ is unobserved and drawn from a categorical prior,
+\begin{equation}
+  z_i \sim \mathrm{Categorical}(\pi_1,\ldots,\pi_M),
+  \qquad \pi_m \geq 0,\quad \textstyle\sum_m \pi_m = 1.
+  \label{eq:prior}
+\end{equation}
+Conditioned on $z_i = m$, the snapshot is distributed as
+\begin{equation}
+ ( s^{(i)} \mid z_i{=}m) \;\sim\;
   \cN\!\bigl(\hats_m^{(i)},\;\sigma^2 W^{-1}\bigr),
   \label{eq:likelihood}
-\end{align}
-where $z_i \in \{1,\ldots,M\}$ is an unobserved regime label,
-$W = \mathrm{diag}(w_1,\ldots,w_{N_y})$ is a grid lenght matrix, $\sigma^2 > 0$
-controls the softness of regime assignments,
-and $\hats_m^{(i)}$ is the regime-$m$ approximation to $s^{(i)}$.
+\end{equation}
+where $W = \mathrm{diag}(w_1,\ldots,w_{N_y})$ is the quadrature weight matrix, $\sigma^2 > 0$ controls the softness of regime assignments, and $\hats_m^{(i)}$ is the regime-$m$ approximation to $s^{(i)}$.
 \end{definition}
 
 
-The generative model leaves the regime-$m$ approximation $\hats_m^{(i)}$ unspecified. We require only that it admits a \emph{separable low-rank form}: a parameter-dependent mean plus a finite sum of spatial modes weighted by temporal coefficients,
+The generative model leaves $\hats_m^{(i)}$ unspecified. We require only that it admits a \emph{separable low-rank form}:
 \begin{equation}
   \hats_m^{(i)}(x)
   \;=\; \phi_0^{(m)}\!\left(x;\kappa^{(i)}\right)
@@ -180,81 +173,67 @@ The generative model leaves the regime-$m$ approximation $\hats_m^{(i)}$ unspeci
     \psi_p^{(m)}\!\left(t^{(i)};\kappa^{(i)}\right),
   \label{eq:separable}
 \end{equation}
-where $\phi_p^{(m)}(\cdot;\kappa)$ are spatial basis functions and $\psi_p^{(m)}(\cdot;\kappa)$ are temporal coefficients, both conditioned on $\kappa$. The form~\eqref{eq:separable} is general: the bases $\{\phi_p^{(m)}\}$ may be fixed linear modes (POD~\citep{Lu2022}), data-dependent nonlinear features (kernel PCA~\citep{Eivazi2024}). In this work, we instantiate~\eqref{eq:separable} with Neural-POD bases~\citep{Mou2026}; the precise construction is given in Section~\ref{sec:method}.
-
-
-
+where $\phi_p^{(m)}(\cdot;\kappa)$ are spatial basis functions and $\psi_p^{(m)}(\cdot;\kappa)$ temporal coefficients, both conditioned on $\kappa$. This form encompasses POD~\citep{Lu2022}, kernel PCA~\citep{Eivazi2024}, and learned neural bases~\citep{Mou2026}; in this work we adopt the latter.
 
 \begin{definition}[Regime approximator]
 \label{def:approx}
-Under regime $m$, the approximation $\hats_m^{(i)}$ takes the separable form~\eqref{eq:separable} with neural basis functions. We write $\Phi_m = \{\phi_p^{(m)},\psi_p^{(m)}\}_{p=0}^{P_m}$ for the full parameter set of regime $m$, where $\phi_0^{(m)}(\cdot;\kappa)$ is a parameter-dependent mean, $\{\phi_p^{(m)}(\cdot;\kappa)\}_{p=1}^{P_m}$ are spatial basis networks, $\{\psi_p^{(m)}(\cdot;\kappa)\}_{p=1}^{P_m}$ are temporal coefficient networks, and the mode count $P_m \leq P_{\max}$ is determined adaptively during training.
+The parameters of regime $m$ are
+$\Phi_m = \{\phi_p^{(m)}, \psi_p^{(m)}\}_{p=0}^{P_m}$,
+where $\phi_0^{(m)}(\cdot;\kappa)$ is a parameter-dependent mean,
+$\{\phi_p^{(m)}\}_{p \geq 1}$ spatial basis networks,
+$\{\psi_p^{(m)}\}_{p \geq 1}$ temporal coefficient networks,
+and $P_m \leq P_{\max}$ the adaptive mode count.
 \end{definition}
 
-
-The learning problem naturally decomposes into two phases. First, we discover the latent regime structure of $\cD$ from snapshots alone (\emph{offline}). Second, we use the discovered structure to train a deployable operator for fast inference on new inputs (\emph{online}).
+The learning problem decomposes into two phases: discovering the latent regime structure from $\cD$ \emph{offline}, then training a deployable operator for fast inference \emph{online}.
 
 
 \subsection*{Phase 1: Offline regime discovery}
 
-Regime labels $\{z_i\}$ are unobserved. The natural objective is the observed-data log-likelihood
+Since the regime labels $z_i$ in~\eqref{eq:likelihood} are unobserved,
+we recover the bases $\{\Phi_m\}$, mixture weights $\pi$, and noise
+level $\sigma^2$ by maximizing the observed-data log-likelihood:
 \begin{equation}
-  \ell(\Phi,\pi,\sigma^2)
-  \;=\; \sum_{i=1}^N \log \sum_{m=1}^M
-    \frac{\pi_m\,\det(W)^{1/2}}{(2\pi\sigma^2)^{N_y/2}}
-    \exp\!\!\left(-\frac{\normsq{s^{(i)}-\hats_m^{(i)}}}{2\sigma^2}\right),
-  \label{eq:mle}
-\end{equation}
-whose $\log\!\sum$ structure makes direct maximization over $(\Phi,\pi,\sigma^2)$ intractable when $\hats_m^{(i)}$ are
-parameterized by neural networks. We therefore maximize the ELBO \begin{equation}
   (\Phi^*,\pi^*,\sigma^{2*})
   \;=\; \operatorname*{arg\,max}_{\Phi,\,\pi,\,\sigma^2}
-  \;\cF(\gamma,\Phi,\pi,\sigma^2)
-  \;\leq\; \ell(\Phi,\pi,\sigma^2),
-  \label{eq:opt}
+  \;\sum_{i=1}^N \log \sum_{m=1}^M
+    \frac{\pi_m\,\det(W)^{1/2}}{(2\pi\sigma^2)^{N_y/2}}
+    \exp\!\!\left(-\frac{\normsq{s^{(i)}-\hats_m^{(i)}}}{2\sigma^2}\right).
+  \label{eq:mle}
 \end{equation}
-where the gap $\ell - \cF = \sum_i \KL(q_i \| p(z_i \mid s^{(i) }, \Phi,\pi,\sigma^2)) \geq 0$ is closed at each E-step by setting $\gamma_{im} = p(z_i{=}m \mid s^{(i)},\Phi,\pi,\sigma^2)$. The converged responsibilities $\{\gamma_{im}^*\}$ encode the discovered regime structure and serve as soft supervision for Phase~2.
+The solution yields soft regime assignments
+$\gamma_{im}^* = p(z_i{=}m \mid s^{(i)},\Phi^*,\pi^*,\sigma^{2*})$
+that encode the discovered regime structure of $\cD$
+and serve as supervision for Phase~2.
 
 
 
 \subsection*{Phase 2: Online operator learning}
 
-With bases $\{\Phi_m^*\}$ and responsibilities $\{\gamma_{im}^*\}$ frozen, we train a \emph{GatingNet} and $M$ \emph{BranchNets} that map a new input function $u$ and parameter $\kappa$ to a weighted combination of local predictions across regimes; the precise architecture is given in Section~\ref{sec:method}.
+With bases $\{\Phi_m^*\}$ and responsibilities $\{\gamma_{im}^*\}$
+frozen, we train a \emph{GatingNet} and $M$ \emph{BranchNets} that
+map a new input $(u, \kappa)$ to a weighted combination of local
+regime predictions. The training objective balances three goals:
+reconstruction accuracy on $\cD$, consistency of the learned gating
+with the offline regime structure $\{\gamma_{im}^*\}$, and diversity
+across regimes to prevent collapse. The precise architecture and loss
+are given in Section~\ref{sec:method}.
 
-The \emph{GatingNet} and \emph{BranchNets} are trained together by minimizing
-\begin{align}
-  \mathcal{L}_\mathrm{data} &= \frac{1}{N}\sum_{i=1}^N
-    \normsq{s^{(i)} - \hat{s}(\cdot;\,u^{(i)},\kappa^{(i)})},
-  \label{eq:loss_data}\\
-  \mathcal{L}_\mathrm{KL} &= \frac{1}{N}\sum_{i,m}
-    w_m^{(i)}\log\frac{w_m^{(i)}}{\gamma_{im}^*},
-  \label{eq:loss_kl}\\
-  \mathcal{L}_\mathrm{ent} &= -\frac{1}{N}\sum_{i,m}
-    w_m^{(i)}\log w_m^{(i)},
-  \label{eq:loss_ent}
-\end{align}
-combined as
+The quality of the final approximation is measured by the mean
+relative $L^2$ error on held-out test snapshots:
 \begin{equation}
-  (W^*,B^*) = \operatorname*{arg\,min}_{W,\,B}\;
-  \mathcal{L}_\mathrm{online},
-  \qquad
-  \mathcal{L}_\mathrm{online} =
-  \mathcal{L}_\mathrm{data}
-  + \lambda_\KL\,\mathcal{L}_\mathrm{KL}
-  - \lambda_H\,\mathcal{L}_\mathrm{ent},
-  \label{eq:online}
+  \varepsilon \;=\; \frac{1}{N_\mathrm{test}}
+  \sum_{i=1}^{N_\mathrm{test}}
+  \frac{\norm{s^{(i)} - \hat{s}(\cdot;\,u^{(i)},\kappa^{(i)})}}
+       {\norm{s^{(i)}}} .
+  \label{eq:metric}
 \end{equation}
-where $\mathcal{L}_\mathrm{data}$ drives prediction accuracy,
-$\mathcal{L}_\mathrm{KL}$ anchors gating to the offline regime
-structure $\{\gamma_{im}^*\}$, and $\mathcal{L}_\mathrm{ent}$
-prevents collapse to a single regime.
 
-
-\textit{The algorithm} alternates between inferring soft regime assignments via the EM, then trains the gated operator $(W, B)$ on~\eqref{eq:online}.
-
+\textit{The algorithm} solves Phase~1 via EM and 
+Phase~2 via gradient descent; details are in Section~\ref{sec:method}.
 \newpage
 
-\section{Method}
-\label{method}
+
 
 TODOOO 
 
@@ -279,6 +258,33 @@ Given input function $u$ sampled at sensor locations and parameter $\kappa$, the
 where $w_m(u,\kappa) \in [0,1]$, $\sum_m w_m = 1$, are the \emph{GatingNet} outputs, and $b_{m,k}(u,\kappa)$ are the \emph{BranchNet} expansion coefficients for regime $m$
 
 \end{definition}
+
+
+Online
+
+\begin{align}
+  \mathcal{L}_\mathrm{data} &= \frac{1}{N}\sum_{i=1}^N
+    \normsq{s^{(i)} - \hat{s}(\cdot;\,u^{(i)},\kappa^{(i)})},
+  \label{eq:loss_data}\\
+  \mathcal{L}_\mathrm{KL} &= \frac{1}{N}\sum_{i,m}
+    w_m^{(i)}\log\frac{w_m^{(i)}}{\gamma_{im}^*},
+  \label{eq:loss_kl}\\
+  \mathcal{L}_\mathrm{ent} &= -\frac{1}{N}\sum_{i,m}
+    w_m^{(i)}\log w_m^{(i)},
+  \label{eq:loss_ent}
+\end{align}
+combined as
+\begin{equation}
+  (W^*,B^*) = \operatorname*{arg\,min}_{W,\,B}\;
+  \mathcal{L}_\mathrm{online},
+  \qquad
+  \mathcal{L}_\mathrm{online} =
+  \mathcal{L}_\mathrm{data}
+  + \lambda_\KL\,\mathcal{L}_\mathrm{KL}
+  - \lambda_H\,\mathcal{L}_\mathrm{ent},
+  \label{eq:online}
+\end{equation}
+
 
 
 
