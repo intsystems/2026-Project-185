@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import torch
 import torch.nn as nn
 
@@ -72,3 +73,37 @@ class NeuralPODMode(nn.Module):
         phi_vals = self.phi(x, kappa)              # (N, Ny)
         psi_vals = self.psi(t, kappa)              # (N,)
         return phi_vals * psi_vals.unsqueeze(-1)    # (N, Ny)
+
+
+class SpatialFourierNN(nn.Module):
+    """Spatial basis: Random Fourier Features -> MLP -> scalar"""
+
+    def __init__(self, d_x: int = 1, hidden_dim: int = 128,
+                 num_frequencies: int = 16, scale: float = 10.0) -> None:
+        super().__init__()
+        self.B = nn.Parameter(
+            torch.randn(num_frequencies, d_x) * scale, requires_grad=False
+        )
+        self.net = nn.Sequential(
+            nn.Linear(2 * num_frequencies, hidden_dim), nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim), nn.Tanh(),
+            nn.Linear(hidden_dim, 1)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x_proj = 2 * math.pi * x @ self.B.T
+        feats = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], dim=-1)
+        return self.net(feats).squeeze(-1)
+
+
+class FourierPODMode(nn.Module):
+    """FN-POD mode: spatial basis phi(x) with temporal coefficients lambda (M,)"""
+
+    def __init__(self, d_x: int, M: int, hidden_dim: int = 128,
+                 num_frequencies: int = 16, scale: float = 10.0) -> None:
+        super().__init__()
+        self.phi = SpatialFourierNN(d_x, hidden_dim, num_frequencies, scale)
+        self.lambda_ten = nn.Parameter(torch.ones(M))
+
+    def forward(self, x: torch.Tensor, t=None, kappa=None) -> torch.Tensor:
+        return torch.outer(self.phi(x), self.lambda_ten)
