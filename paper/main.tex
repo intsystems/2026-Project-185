@@ -235,6 +235,97 @@ Phase~2 via gradient descent; details are in Section~\ref{sec:method}.
 
 
 
+\section{Computational Experiment}
+
+The goal of the experiment is to verify that the TEMPO framework can
+discover regime-specific NeuralPOD bases from multi-parameter PDE data
+and achieve accurate solution reconstruction on held-out samples.
+
+\paragraph{Dataset.}
+We use the PDEBench benchmark~\cite{Takamoto2022}, specifically
+the 1D Burgers' equation
+$\partial_t u + u\,\partial_x u = \nu\,\partial_{xx}u$
+on $x\in(-1,1)$, $t\in(0,2)$.
+The physical parameter $\kappa = \nu$ is varied across four values
+$\{0.001,\,0.01,\,0.1,\,1.0\}$, producing solutions that range from
+smooth diffusive profiles ($\nu=1.0$) to near-discontinuous shock
+structures ($\nu=0.001$).
+Each viscosity file contains $N=9{,}500$ samples on a uniform grid of
+$N_x=1024$ spatial points and $N_t=101$ time steps; the combined
+training set comprises approximately $3.8\times10^6$ snapshots.
+
+
+PDEBench also provides several other benchmark tasks that we plan to
+evaluate in future work:
+\begin{itemize}
+  \item \textbf{1D Advection} $\partial_t u + \beta\,\partial_x u = 0$:
+    pure transport at speed $\beta$, tests resolution of travelling waves.
+  \item \textbf{1D/2D Reaction--Diffusion}: two coupled fields
+    (activator and inhibitor), produces Turing-type spatial patterns.
+  \item \textbf{2D Darcy Flow}
+    $-\nabla\cdot(a(x)\,\nabla u) = f$:
+    steady-state elliptic equation, maps permeability field $a(x)$ to
+    pressure $u$, widely used in subsurface flow modelling.
+  \item \textbf{2D Shallow Water}: height and velocity fields over
+    complex bathymetry, models flood dynamics and tsunami propagation.
+  \item \textbf{1D/2D/3D Compressible Navier--Stokes}: three coupled
+    fields (density, velocity, pressure), most challenging task in the
+    benchmark, tests high-Reynolds turbulent regimes.
+\end{itemize}
+
+\paragraph{Metrics.}
+Model accuracy is evaluated using four standard scalar metrics computed
+on a held-out test split (10\% of samples):
+\begin{itemize}
+  \item \textbf{MSE}: mean squared error
+    $\frac{1}{N}\sum_i\|\hat{u}_i - u_i\|_2^2$;
+  \item \textbf{RMSE}: root mean squared error $\sqrt{\text{MSE}}$;
+  \item \textbf{Relative $L^2$ error}:
+    $\|\hat{u}-u\|_2 / \|u\|_2$;
+  \item \textbf{MAPE}: mean absolute percentage error
+    $\frac{1}{N}\sum_i |\hat{u}_i - u_i| / (|u_i|+\epsilon)$.
+\end{itemize}
+
+\paragraph{Expected results.}
+Table~\ref{tab:results} will report these four metrics for TEMPO and
+the Neural-POD baseline~\cite{mou2026neuralpod} across the two most
+contrasting viscosity regimes.
+Figure~\ref{fig:results} will show training loss curves, residual norm
+decay per mode, and space--time reconstruction heatmaps for both regimes.
+
+\begin{table}[h]
+\centering
+\caption{Reconstruction accuracy on 1D Burgers' test set.}
+\label{tab:results}
+\begin{tabular}{lcccc}
+\toprule
+Method & MSE & RMSE & Rel.\ $L^2$ & MAPE \\
+\midrule
+Neural-POD & -- & -- & -- & -- \\
+\textbf{TEMPO (ours)}              & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{output.png}
+\caption{Experimental results $\nu=1.0$.}
+\label{fig:results}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{ideas.jpg}
+\caption{Ideas for plots.}
+\label{fig:ideas}
+\end{figure}
+
+
+
+
+\newpage
+
 TODOOO 
 
 
