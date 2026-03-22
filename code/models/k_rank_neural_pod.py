@@ -52,6 +52,7 @@ class WeightedNeuralPODTrainer:
         self.history = TrainHistory()
         self._w_data = None
         self._w_basis = None
+        self.num_modes = 0
 
     def train(
         self,
@@ -73,6 +74,11 @@ class WeightedNeuralPODTrainer:
         Returns:
             TrainHistory with weighted losses
         """
+        print(f"\nWeighted Joint Neural POD Training")
+        print(f"Data: s={tuple(s.shape)}, x={tuple(x.shape)}")
+        print(f"Config: K={self.cfg.K}, n_epochs={self.cfg.n_epochs}, batch_size={self.cfg.batch_size}")
+        print(f"Optimizer: lr={self.cfg.lr}, grad_clip={self.cfg.grad_clip_norm}")
+
         N, Ny = s.shape
 
         dl = DataLoader(
@@ -102,9 +108,9 @@ class WeightedNeuralPODTrainer:
         if self.cfg.lambda_basis == 0.0:
             self._w_basis = 0.0
 
-        print(f"\nWeight initialization (reciprocal weighting):")
-        print(f"  L_data_init = {loss_data_init:.6e}, w_data = {self._w_data:.6e}")
-        print(f"  L_basis_init = {loss_basis_init:.6e}, w_basis = {self._w_basis:.6e}\n")
+        print(f"Weight initialization:")
+        print(f"  L_data = {loss_data_init:.4e}, w_data = {self._w_data:.4e}")
+        print(f"  L_basis = {loss_basis_init:.4e}, w_basis = {self._w_basis:.4e}\n")
 
         # Training loop
         self.basis.train()
@@ -144,5 +150,9 @@ class WeightedNeuralPODTrainer:
                     L_data=f"{avg_data:.3e}",
                     L_basis=f"{avg_basis:.3e}",
                 )
+
+        final_loss = self.history.mean_loss[-1] if self.history.mean_loss else 0.0
+        print(f"Training complete: {self.cfg.n_epochs} epochs")
+        print(f"Final loss: {final_loss:.4e}\n")
 
         return self.history

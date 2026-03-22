@@ -59,6 +59,7 @@ class FourierNeuralPODTrainer:
         self.cfg = cfg
         self.history = TrainHistory()
         self._device = basis.quad_weights.device
+        self.num_modes = 0
 
     def train(
         self,
@@ -80,20 +81,31 @@ class FourierNeuralPODTrainer:
         Returns:
             TrainHistory with losses and residual norms
         """
+        print(f"\nFourier Neural POD Training")
+        print(f"Data: s={tuple(s.shape)}, x={tuple(x.shape)}")
+        print(f"Config: max_modes={self.cfg.max_modes}, tol={self.cfg.tol:.0e}")
+        print(f"Optimizer: lr_spatial={self.cfg.lr}, lr_temporal={self.cfg.lr_lambda}")
+
         self._tol_abs = self.cfg.tol * s.pow(2).mean().item()
         s_mean = s.mean(dim=0)
 
         self._train_mean(s_mean, x)
         r = self._full_residual(s, x)
 
+        self.num_modes = 0
         while (
             r.pow(2).mean().item() >= self._tol_abs
             and len(self.basis.modes) < self.cfg.max_modes
         ):
+            self.num_modes += 1
             mode = self.basis.add_mode()
             self._train_mode(mode, r, x)
             r = self._update_residual(r, mode, x)
             self.history.residual_norms.append(r.pow(2).mean().item())
+
+        final_residual = r.pow(2).mean().item()
+        print(f"Training complete: {self.num_modes} modes extracted")
+        print(f"Final residual: {final_residual:.4e}\n")
 
         return self.history
 
