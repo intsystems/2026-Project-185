@@ -278,8 +278,7 @@ Model accuracy is evaluated using four standard scalar metrics computed
 on a held-out test split (10\% of samples):
 \begin{itemize}
   \item \textbf{MSE}: mean squared error
-    $\frac{1}{N}\sum_i\|\hat{u}_i - u_i\|_2^2$;
-  \item \textbf{RMSE}: root mean squared error $\sqrt{\text{MSE}}$;
+    $\frac{1}{N}\sum_i\|\hat{u}_i - u_i\|_2^2$ and \textbf{RMSE};
   \item \textbf{Relative $L^2$ error}:
     $\|\hat{u}-u\|_2 / \|u\|_2$;
   \item \textbf{MAPE}: mean absolute percentage error
@@ -301,22 +300,32 @@ decay per mode, and space--time reconstruction heatmaps for both regimes.
 \toprule
 Method & MSE & RMSE & Rel.\ $L^2$ & MAPE \\
 \midrule
+DeepONet & -- & -- & -- & -- \\
+POD-DeepONet & -- & -- & -- & -- \\
 Neural-POD & -- & -- & -- & -- \\
-\textbf{TEMPO (ours)}              & -- & -- & -- & -- \\
+\textbf{TEMPO}              & -- & -- & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{output.png}
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/output_FNO.png}
 \caption{Experimental results $\nu=1.0$.}
 \label{fig:results}
 \end{figure}
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/reconstruct.png}
+\caption{Experimental results $\nu=1.0$.}
+\label{fig:results}
+\end{figure}
+
+
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{ideas.jpg}
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/ideas.jpg}
 \caption{Ideas for plots.}
 \label{fig:ideas}
 \end{figure}

@@ -9,14 +9,14 @@ from .neural_pod_mode import MeanNet, NeuralPODMode, SpatialFourierNN, FourierPO
 
 
 class RegimeBasis(nn.Module):
-    """NeuralPOD basis for one regime
+    """Parametric basis: mean network + K-rank mode.
 
     Args:
-        d_x:          spatial coordinate dimension
-        d_kappa:      physical parameter dimension
-        quad_weights: quadrature weights, shape (Ny,)
-        hidden_dim:   hidden layer width
-        n_layers:     number of hidden layers
+        d_x: spatial coordinate dimension
+        d_kappa: parameter dimension
+        quad_weights: quadrature weights (Ny,)
+        K: rank of factorization
+        hidden_dim: network width
     """
 
     def __init__(
@@ -24,55 +24,41 @@ class RegimeBasis(nn.Module):
         d_x: int,
         d_kappa: int,
         quad_weights: torch.Tensor,
+        K: int = 8,
         hidden_dim: int = 64,
-        n_layers: int = 4,
     ) -> None:
         super().__init__()
         self.d_x = d_x
         self.d_kappa = d_kappa
+        self.K = K
         self.hidden_dim = hidden_dim
-        self.n_layers = n_layers
 
-        self.mean_net = MeanNet(d_x, d_kappa, hidden_dim, n_layers)
-        self.modes = nn.ModuleList()
+        self.mean_net = MeanNet(d_x, d_kappa, hidden_dim, n_layers=2)
+        self.mode = NeuralPODMode(d_x, d_kappa, K=K, hidden_dim=hidden_dim)
 
-        self.register_buffer("quad_weights", quad_weights)  # (Ny,)
+        self.register_buffer("quad_weights", quad_weights)
 
     @property
     def num_modes(self) -> int:
-        """Number of trained modes P_m (no mean)"""
-        return len(self.modes)
+        return self.K
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, kappa: torch.Tensor) -> torch.Tensor:
-        out = self.mean_net(x, kappa)
-        for mode in self.modes:
-            out = out + mode(x, t, kappa)
-        return out
-
+        return self.mean_net(x, kappa) + self.mode(x, t, kappa)
 
     def _weighted_norm_sq(self, f: torch.Tensor, gamma: torch.Tensor) -> torch.Tensor:
         return (gamma * (f ** 2 * self.quad_weights).sum(dim=-1)).sum()
 
-    def add_mode(self) -> NeuralPODMode:
-        mode = NeuralPODMode(self.d_x, self.d_kappa, self.hidden_dim, self.n_layers)
-        mode = mode.to(self.quad_weights.device)
-        self.modes.append(mode)
-        return mode
-
-    def prune_last_mode(self) -> None:
-        self.modes = nn.ModuleList(list(self.modes)[:-1])
-
 
 class FourierRegimeBasis(nn.Module):
-    """FN-POD basis with Fourier spatial features and learnable temporal coefficients.
+    """Sequential Fourier basis with learnable temporal coefficients.
 
     Args:
-        d_x:             spatial dimension
-        M:               number of snapshots (size of temporal coefficients)
-        quad_weights:    quadrature weights (Ny,)
-        hidden_dim:      hidden layer width
-        num_frequencies: number of Fourier frequencies
-        scale:           scale of random Fourier features
+        d_x: spatial dimension
+        M: number of snapshots (temporal coefficient size)
+        quad_weights: quadrature weights (Ny,)
+        hidden_dim: network width
+        num_frequencies: Fourier feature count
+        scale: Fourier frequency scale
     """
 
     def __init__(
@@ -100,14 +86,15 @@ class FourierRegimeBasis(nn.Module):
         return len(self.modes)
 
     def forward(self, x: torch.Tensor, t=None, kappa=None) -> torch.Tensor:
-        """Full reconstruction: mean + sum of modes.
+        """Reconstruct snapshots: mean plus all modes.
 
         Args:
             x: (Ny, d_x) spatial grid
-            t, kappa: ignored (kept for interface compatibility)
+            t: unused
+            kappa: unused
 
         Returns:
-            (N, Ny) reconstruction for all N snapshots
+            (N, Ny) full reconstruction
         """
         N = self.modes[0].lambda_ten.shape[0] if self.modes else 1
         out = self.mean_net(x).unsqueeze(0).expand(N, -1)  # (N, Ny)
@@ -125,50 +112,110 @@ class FourierRegimeBasis(nn.Module):
         return mode
 
 
-def plot_space_time_heatmaps(basis: FourierRegimeBasis, s_true: torch.Tensor,
-                              x: torch.Tensor, t: torch.Tensor) -> None:
-    """Create space-time heatmap plots: truth, prediction, and error """
+def plot_space_time_heatmaps(obj, s_true: torch.Tensor,
+                              x: torch.Tensor, t: torch.Tensor, title: str = "NeuralPOD") -> plt.Figure:
+    """Plot truth, prediction, and error in space-time.
+
+    Args:
+        obj: basis, trainer, or predictor object
+        s_true: (N, Ny) snapshot matrix
+        x: (Ny, d_x) spatial grid
+        t: (N,) time vector
+        title: plot title
+
+    Returns:
+        matplotlib figure
+    """
     import matplotlib.pyplot as plt
     import numpy as np
 
-
-    basis.eval()
+    # Get predictions based on object type
     with torch.no_grad():
-        s_pred = basis(x, None, None)
+        if hasattr(obj, 'predict'):  # NeuralPODTrainer
+            s_pred = obj.predict(x, t)
+        elif hasattr(obj, 'basis'):  # FourierNeuralPODTrainer
+            obj.basis.eval()
+            s_pred = obj.basis(x, t, None)
+        else:  # Direct basis object (FourierRegimeBasis, RegimeBasis)
+            obj.eval()
+            # For RegimeBasis, need proper kappa. Create dummy ones.
+            batch_size = len(t)
+            d_kappa = 1
+            kappa_dummy = torch.ones(batch_size, d_kappa, device=x.device)
+            s_pred = obj(x, t, kappa_dummy)
 
+    # Convert to numpy
+    s_true_np = s_true.detach().cpu().numpy()  # (N, Ny)
+    s_pred_np = s_pred.detach().cpu().numpy()  # (N, Ny)
+    x_np = x.detach().cpu().numpy().squeeze()   # (Ny,)
+    t_np = t.detach().cpu().numpy()             # (N,)
 
-    s_true_np = s_true.detach().cpu().numpy()
-    s_pred_np = s_pred.detach().cpu().numpy()
-    x_np = x.detach().cpu().numpy().squeeze()
-    t_np = t.detach().cpu().numpy()
-
-
+    # Compute error
     error_np = np.abs(s_true_np - s_pred_np)
 
+    # Get color limits (same for truth and pred)
+    vmax = np.abs(s_true_np).max()
+    emax = error_np.max()
 
-    fig, axes = plt.subplots(1, 3, figsize=(16, 4))
+    # Create 3 subplots
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
+    # 1. Ground truth
+    im0 = axes[0].imshow(
+        s_true_np,
+        aspect='auto',
+        origin='lower',
+        cmap='RdBu_r',
+        extent=[x_np.min(), x_np.max(), t_np.min(), t_np.max()],
+        vmin=-vmax,
+        vmax=vmax
+    )
+    axes[0].set_xlabel('x', fontsize=11)
+    axes[0].set_ylabel('t', fontsize=11)
+    axes[0].set_title('Ground Truth u(x,t)', fontsize=12, fontweight='bold')
+    cbar0 = plt.colorbar(im0, ax=axes[0])
+    cbar0.set_label('u', fontsize=10)
 
-    im0 = axes[0].imshow(s_true_np, aspect='auto', origin='lower', cmap='RdBu_r', extent=[x_np.min(), x_np.max(), t_np.min(), t_np.max()])
-    axes[0].set_xlabel('x')
-    axes[0].set_ylabel('t')
-    axes[0].set_title('Ground Truth u(x,t)')
-    plt.colorbar(im0, ax=axes[0])
+    # 2. Prediction
+    im1 = axes[1].imshow(
+        s_pred_np,
+        aspect='auto',
+        origin='lower',
+        cmap='RdBu_r',
+        extent=[x_np.min(), x_np.max(), t_np.min(), t_np.max()],
+        vmin=-vmax,
+        vmax=vmax
+    )
+    axes[1].set_xlabel('x', fontsize=11)
+    axes[1].set_ylabel('t', fontsize=11)
+    axes[1].set_title(f'{title} Prediction û(x,t)', fontsize=12, fontweight='bold')
+    cbar1 = plt.colorbar(im1, ax=axes[1])
+    cbar1.set_label('û', fontsize=10)
 
+    # 3. Absolute error
+    im2 = axes[2].imshow(
+        error_np,
+        aspect='auto',
+        origin='lower',
+        cmap='hot',
+        extent=[x_np.min(), x_np.max(), t_np.min(), t_np.max()],
+        vmin=0,
+        vmax=emax
+    )
+    axes[2].set_xlabel('x', fontsize=11)
+    axes[2].set_ylabel('t', fontsize=11)
+    axes[2].set_title('Absolute Error |u - û|', fontsize=12, fontweight='bold')
+    cbar2 = plt.colorbar(im2, ax=axes[2])
+    cbar2.set_label('error', fontsize=10)
 
-    im1 = axes[1].imshow(s_pred_np, aspect='auto', origin='lower', cmap='RdBu_r', extent=[x_np.min(), x_np.max(), t_np.min(), t_np.max()])
-    axes[1].set_xlabel('x')
-    axes[1].set_ylabel('t')
-    axes[1].set_title(r'FN-POD Prediction $\hat{u}$(x,t)')
-    plt.colorbar(im1, ax=axes[1])
+    # Compute and display metrics
+    rel_err = np.linalg.norm(s_true_np - s_pred_np) / np.linalg.norm(s_true_np)
+    mean_error = error_np.mean()
 
-
-    im2 = axes[2].imshow(error_np, aspect='auto', origin='lower', cmap='hot', extent=[x_np.min(), x_np.max(), t_np.min(), t_np.max()])
-    axes[2].set_xlabel('x')
-    axes[2].set_ylabel('t')
-    axes[2].set_title(r'Absolute Error |u -$\hat{u}$|')
-    plt.colorbar(im2, ax=axes[2])
-
-    fig.suptitle('FN-POD Reconstruction', fontsize=14, fontweight='bold')
+    fig.suptitle(
+        f'{title} Reconstruction | Relative L2 Error: {rel_err:.4f} | Mean Error: {mean_error:.4f}',
+        fontsize=14,
+        fontweight='bold'
+    )
     plt.tight_layout()
     return fig
