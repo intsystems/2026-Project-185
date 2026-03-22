@@ -15,8 +15,11 @@
         <td align="left"> <b> Consultant </b> </td>
         <td> Alexander Terentyev </td>
     </tr>
+        <tr>
+        <td align="left" rowspan="2"> <b> Advisors </b> </td>
+        <td>  Yury Maximov, DSc</td>
+    </tr>
     <tr>
-        <td align="left"> <b> Advisor </b> </td>
         <td>  Vadim Strijov, DSc</td>
     </tr>
 </table>
@@ -33,6 +36,7 @@
 Operator learning methods typically approximate the solution map of a physical system with a single global model — an assumption that fails when solutions change character fundamentally across the parameter space.
 
 We propose TEMPO: a framework that identifies latent dynamical regimes in snapshot data via Expectation-Maximization, builds a dedicated Neural-POD basis for each, and learns to route new inputs to the right regime at inference time. On multi-regime benchmarks, TEMPO achieves substantially lower errors than POD-DeepONet and vanilla DeepONet, with interpretable structure that reflects the underlying physics.
+
 
 ## Keywords
 Operator learning, DeepONet, Proper Orthogonal Decomposition, Expectation-Maximization, Gaussian mixture models, Regime discovery
