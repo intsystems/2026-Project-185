@@ -5,7 +5,6 @@ from tqdm.auto import tqdm
 
 import torch
 from torch import Tensor
-import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
@@ -13,6 +12,11 @@ from torch.nn.utils import clip_grad_norm_
 
 from .regime_basis import FourierRegimeBasis
 from .neural_pod_mode import FourierPODMode
+
+
+def _weighted_norm_sq(r: Tensor, gamma: Tensor, w: Tensor) -> float:
+    """sum_i gamma_i * sum_j w_j * r_ij^2"""
+    return (gamma * (r ** 2 * w[None, :]).sum(dim=1)).sum().item()
 
 
 @dataclass
@@ -72,84 +76,80 @@ class FourierNeuralPODTrainer:
         """Extract mean and modes from snapshot matrix.
 
         Args:
-            s: (N, Ny) snapshot matrix
-            x: (Ny, d_x) spatial grid
-            t: (N,) time vector
+            s:     (N, Ny) snapshot matrix
+            x:     (Ny, d_x) spatial grid
+            t:     unused
             kappa: unused
-            gamma: unused
-
-        Returns:
-            TrainHistory with losses and residual norms
+            gamma: (N,) responsibility weights; uniform 1/N if None
         """
-        print(f"\nFourier Neural POD Training")
-        print(f"Data: s={tuple(s.shape)}, x={tuple(x.shape)}")
-        print(f"Config: max_modes={self.cfg.max_modes}, tol={self.cfg.tol:.0e}")
-        print(f"Optimizer: lr_spatial={self.cfg.lr}, lr_temporal={self.cfg.lr_lambda}")
+        N, Ny = s.shape
+        device, dtype = s.device, s.dtype
+        w = self.basis.quad_weights.to(device=device, dtype=dtype)  # (Ny,)
 
-        self._tol_abs = self.cfg.tol * s.pow(2).mean().item()
-        s_mean = s.mean(dim=0)
+        if gamma is None:
+            gamma = torch.ones(N, device=device, dtype=dtype) / N
+        else:
+            gamma = (gamma / gamma.sum()).to(device=device, dtype=dtype)
 
-        self._train_mean(s_mean, x)
+        print(f"Fourier NeuralPOD | N={N}, Ny={Ny} | max_modes={self.cfg.max_modes}")
+
+        s_mean = (gamma[:, None] * s).sum(dim=0)                  # gamma-weighted mean (Ny,)
+        s_centered = s - s_mean[None, :]
+        self._tol_abs = self.cfg.tol * _weighted_norm_sq(s_centered, gamma, w)
+
+        self._train_mean(s_mean, x, w)
         r = self._full_residual(s, x)
 
         self.num_modes = 0
         while (
-            r.pow(2).mean().item() >= self._tol_abs
+            _weighted_norm_sq(r, gamma, w) >= self._tol_abs
             and len(self.basis.modes) < self.cfg.max_modes
         ):
             self.num_modes += 1
             mode = self.basis.add_mode()
-            self._train_mode(mode, r, x)
+            self._train_mode(mode, r, x, gamma, w)
             r = self._update_residual(r, mode, x)
-            self.history.residual_norms.append(r.pow(2).mean().item())
+            res = _weighted_norm_sq(r, gamma, w)
+            self.history.residual_norms.append(res)
+            print(f"  mode {self.num_modes}: weighted_res={res:.4e}")
 
-        final_residual = r.pow(2).mean().item()
-        print(f"Training complete: {self.num_modes} modes extracted")
-        print(f"Final residual: {final_residual:.4e}\n")
-
+        print(f"  done: {self.num_modes} modes\n")
         return self.history
 
-    def _make_dataloader(self, x: Tensor, target: Tensor) -> DataLoader:
+    def _make_dataloader(self, *tensors) -> DataLoader:
         return DataLoader(
-            TensorDataset(x, target),
+            TensorDataset(*tensors),
             batch_size=self.cfg.batch_size,
             shuffle=True,
         )
 
     @torch.no_grad()
     def _full_residual(self, s: Tensor, x: Tensor) -> Tensor:
-        mean_pred = self.basis.mean_net(x)
-        return (s - mean_pred.unsqueeze(0)).detach()
+        return (s - self.basis.mean_net(x).unsqueeze(0)).detach()
 
     @torch.no_grad()
     def _update_residual(self, r: Tensor, mode: FourierPODMode, x: Tensor) -> Tensor:
         phi = mode.phi(x)
-        pred = torch.outer(phi, mode.lambda_ten).T
-        return (r - pred).detach()
+        return (r - torch.outer(phi, mode.lambda_ten).T).detach()
 
-    def _train_mean(self, s_mean: Tensor, x: Tensor) -> None:
-        dl = self._make_dataloader(x, s_mean)
+    def _train_mean(self, s_mean: Tensor, x: Tensor, w: Tensor) -> None:
+        """Loss: sum_j w_j * (mean_net(x_j) - s_mean_j)^2"""
+        dl = self._make_dataloader(x, s_mean, w)
         opt = AdamW(self.basis.mean_net.parameters(), lr=self.cfg.lr, weight_decay=1e-2)
         scheduler = OneCycleLR(
-            opt,
-            max_lr=self.cfg.max_lr,
-            epochs=self.cfg.n_epochs_mean,
-            steps_per_epoch=len(dl),
-            anneal_strategy="cos",
-            pct_start=self.cfg.pct_start,
-            div_factor=self.cfg.div_factor,
+            opt, max_lr=self.cfg.max_lr,
+            epochs=self.cfg.n_epochs_mean, steps_per_epoch=len(dl),
+            anneal_strategy="cos", pct_start=self.cfg.pct_start, div_factor=self.cfg.div_factor,
         )
         pbar = tqdm(range(self.cfg.n_epochs_mean), desc="mean", leave=False)
         for epoch in pbar:
             epoch_loss = 0.0
-            for x_b, mean_b in dl:
+            for x_b, mean_b, w_b in dl:
                 opt.zero_grad()
                 pred = self.basis.mean_net(x_b)
-                loss = F.mse_loss(pred, mean_b)
+                loss = (w_b * (pred - mean_b) ** 2).sum()
                 loss.backward()
-                clip_grad_norm_(
-                    self.basis.mean_net.parameters(), self.cfg.grad_clip_norm
-                )
+                clip_grad_norm_(self.basis.mean_net.parameters(), self.cfg.grad_clip_norm)
                 opt.step()
                 scheduler.step()
                 epoch_loss += loss.item()
@@ -158,45 +158,33 @@ class FourierNeuralPODTrainer:
                 self.history.mean_loss.append(avg)
                 pbar.set_postfix(loss=f"{avg:.3e}")
 
-    def _train_mode(self, mode: FourierPODMode, r: Tensor, x: Tensor) -> None:
-        dl = self._make_dataloader(x, r.T.contiguous())
-        opt = AdamW(
-            [
-                {
-                    "params": mode.phi.parameters(),
-                    "lr": self.cfg.lr,
-                    "weight_decay": 1e-2,
-                },
-                {
-                    "params": [mode.lambda_ten],
-                    "lr": self.cfg.lr_lambda,
-                    "weight_decay": 0.0,
-                },
-            ]
-        )
+    def _train_mode(
+        self, mode: FourierPODMode, r: Tensor, x: Tensor, gamma: Tensor, w: Tensor
+    ) -> None:
+        """Loss: sum_i gamma_i * sum_j w_j * (phi(x_j) * lambda_i - r_ij)^2"""
+        dl = self._make_dataloader(x, r.T.contiguous(), w)
+        opt = AdamW([
+            {"params": mode.phi.parameters(), "lr": self.cfg.lr, "weight_decay": 1e-2},
+            {"params": [mode.lambda_ten], "lr": self.cfg.lr_lambda, "weight_decay": 0.0},
+        ])
         scheduler = OneCycleLR(
-            opt,
-            max_lr=self.cfg.max_lr,
-            epochs=self.cfg.n_epochs_mode,
-            steps_per_epoch=len(dl),
-            anneal_strategy="cos",
-            pct_start=self.cfg.pct_start,
-            div_factor=self.cfg.div_factor,
+            opt, max_lr=self.cfg.max_lr,
+            epochs=self.cfg.n_epochs_mode, steps_per_epoch=len(dl),
+            anneal_strategy="cos", pct_start=self.cfg.pct_start, div_factor=self.cfg.div_factor,
         )
         p = len(self.history.mode_losses) + 1
         pbar = tqdm(range(self.cfg.n_epochs_mode), desc=f"mode {p}", leave=False)
         mode_history: list[float] = []
         for epoch in pbar:
             epoch_loss = 0.0
-            for x_b, r_b in dl:
+            for x_b, r_b, w_b in dl:
                 opt.zero_grad()
-                phi = mode.phi(x_b)
-                pred = torch.outer(phi, mode.lambda_ten)
-                loss = F.mse_loss(pred, r_b)
+                phi  = mode.phi(x_b)                          # (B,)
+                pred = torch.outer(phi, mode.lambda_ten)      # (B, N)
+                loss = ((pred - r_b) ** 2 * gamma[None, :] * w_b[:, None]).sum()
                 loss.backward()
                 clip_grad_norm_(
-                    list(mode.phi.parameters()) + [mode.lambda_ten],
-                    self.cfg.grad_clip_norm,
+                    list(mode.phi.parameters()) + [mode.lambda_ten], self.cfg.grad_clip_norm,
                 )
                 opt.step()
                 scheduler.step()

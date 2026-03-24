@@ -114,7 +114,7 @@ class PODTrainer:
 
         print(f"POD | N={N}, Ny={Ny} | max_modes={self.cfg.max_modes}, tol={self.cfg.tol}")
 
-        mean       = (gamma.unsqueeze(1) * s).sum(dim=0)   # (Ny,)
+        mean       = (gamma.unsqueeze(1) * s).sum(dim=0)     # (Ny,)
         s_centered = s - mean.unsqueeze(0)                   # (N, Ny)
 
         sqrt_gamma = gamma.sqrt().unsqueeze(1)
