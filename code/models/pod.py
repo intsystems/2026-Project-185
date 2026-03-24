@@ -112,42 +112,28 @@ class PODTrainer:
         else:
             gamma = (gamma / gamma.sum()).to(device=device, dtype=dtype)
 
-        print(f"\nClassical POD (SVD)")
-        print(f"Data: N={N} snapshots, Ny={Ny} spatial points")
-        print(f"Config: max_modes={self.cfg.max_modes}, tol={self.cfg.tol}")
+        print(f"POD | N={N}, Ny={Ny} | max_modes={self.cfg.max_modes}, tol={self.cfg.tol}")
 
-        # Weighted mean: sum_i gamma_i * s_i
-        mean = (gamma.unsqueeze(1) * s).sum(dim=0)   # (Ny,)
-        s_centered = s - mean.unsqueeze(0)             # (N, Ny)
+        mean       = (gamma.unsqueeze(1) * s).sum(dim=0)   # (Ny,)
+        s_centered = s - mean.unsqueeze(0)                   # (N, Ny)
 
-        # Weighted SVD: scale rows by sqrt(gamma) so that
-        # SVD of S_w = diag(sqrt(gamma)) @ S_centered gives
-        # modes optimal under the gamma-weighted L2 norm
-        sqrt_gamma = gamma.sqrt().unsqueeze(1)         # (N, 1)
-        s_weighted = sqrt_gamma * s_centered           # (N, Ny)
+        sqrt_gamma = gamma.sqrt().unsqueeze(1)
+        s_weighted = sqrt_gamma * s_centered                 # (N, Ny)
 
-        # SVD on CPU
-        U, sigma, Vh = torch.linalg.svd(
-            s_weighted.cpu().float(), full_matrices=False
-        )
-        # shapes: U (N, K), sigma (K,), Vh (K, Ny),  K = min(N, Ny)
+        U, sigma, Vh = torch.linalg.svd(s_weighted.cpu().float(), full_matrices=False)
 
-        V = Vh.T.to(device=device, dtype=dtype)  # (Ny, K) — modes as columns
+        V     = Vh.T.to(device=device, dtype=dtype)          # (Ny, K)
         sigma = sigma.to(device=device, dtype=dtype)
 
-        # Select P by variance threshold, capped at max_modes
         energy = sigma ** 2
         cumvar = torch.cumsum(energy, dim=0) / energy.sum()
         above_tol = (cumvar >= self.cfg.tol).nonzero(as_tuple=True)[0]
         n_for_tol = int(above_tol[0].item()) + 1 if len(above_tol) > 0 else len(sigma)
         P = min(n_for_tol, self.cfg.max_modes, len(sigma))
 
-        top_k = min(10, len(sigma))
-        print(f"Top-{top_k} singular values: "
-              f"{sigma[:top_k].cpu().numpy().round(4).tolist()}")
-        print(f"Modes for {self.cfg.tol*100:.2f}% variance: {n_for_tol}  →  using P={P}\n")
+        print(f"  P={P} modes ({self.cfg.tol*100:.2f}% variance threshold, needed {n_for_tol})")
 
-        modes = V[:, :P]             # (Ny, P)
+        modes  = V[:, :P]            # (Ny, P)
         coeffs = s_centered @ modes  # (N, P)
 
         self.basis.initialize(mean, modes, coeffs)
@@ -156,18 +142,15 @@ class PODTrainer:
 
         self.history.mean_loss = [s_centered.pow(2).mean().item()]
 
-        # Residual norms per mode
         residual = s_centered.clone()
         for p in range(P):
             residual = residual - torch.outer(coeffs[:, p], modes[:, p])
             res_mse = residual.pow(2).mean().item()
             self.history.residual_norms.append(res_mse)
-            print(f"  Mode {p+1:2d}: σ={sigma[p].item():.4e}  "
-                  f"var={cumvar[p].item()*100:.3f}%  "
-                  f"residual_mse={res_mse:.4e}")
+            print(f"  mode {p+1:2d}: sigma={sigma[p].item():.4e}  "
+                  f"cumvar={cumvar[p].item()*100:.2f}%  res_mse={res_mse:.4e}")
 
-        print(f"\nPOD complete: {P} modes, "
-              f"final residual MSE = {self.history.residual_norms[-1]:.4e}\n")
+        print(f"  done: final res_mse={self.history.residual_norms[-1]:.4e}")
 
         return self.history
 
