@@ -180,3 +180,8 @@ literature/
 resources/
 resources
 data/
+code/notebooks/*.png
+code/notebooks/*.pdf
+
+visuals.ipynb
+snapshots/
