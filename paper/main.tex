@@ -316,6 +316,53 @@ Neural-POD & -- & -- & -- & -- \\
 \label{fig:results}
 \end{figure}
 
+
+
+
+
+
+
+
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/t-SNE.png}
+\caption{%
+  t-SNE projection of Burgers' equation snapshots ($N = 38{,}000$,
+  $\nu \in \{0.001, 0.01, 0.1, 1.0\}$).
+  \textit{Left:} hard regime assignments produced by EM-GMM ($M = 4$);
+  stars denote Gaussian centroids $\mu_m$ in the projected space.
+  \textit{Right:} the same embedding coloured by viscosity $\nu$.
+  Regimes do not align with individual viscosity values,
+  confirming that the latent structure reflects solution geometry
+  rather than the physical parameter directly.
+}
+\label{fig:tsne}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/TEMPO_EM.png}
+\caption{%
+  TEMPO regime structure for Burgers' snapshots ($M = 3$).
+  \textit{Left:} UMAP embedding coloured by EM-GMM regime assignment;
+  the manifold decomposes into distinct branches.
+  \textit{Centre:} the same embedding coloured by viscosity $\nu$,
+  showing that each branch spans multiple viscosity values.
+  \textit{Right:} POD coefficient space $(\alpha_1, \alpha_2)$
+  with fitted Gaussian components.
+  EM-GMM clustering is performed directly in this low-dimensional space.
+  Stars indicate regime centroids $\mu_m$.
+}
+\label{fig:umap_em}
+\end{figure}
+
+
+
+
+
+
+
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/reconstruct.png}
