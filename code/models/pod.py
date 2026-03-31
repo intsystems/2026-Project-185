@@ -122,7 +122,7 @@ class PODTrainer:
 
         U, sigma, Vh = torch.linalg.svd(s_weighted.cpu().float(), full_matrices=False)
 
-        V     = Vh.T.to(device=device, dtype=dtype)          # (Ny, K)
+        V = Vh.T.to(device=device, dtype=dtype)          # (Ny, K)
         sigma = sigma.to(device=device, dtype=dtype)
 
         energy = sigma ** 2

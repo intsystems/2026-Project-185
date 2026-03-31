@@ -95,7 +95,8 @@ class TEMPOTrainer:
         """GMM on alpha -> initial gamma, pi, mu, Sigma."""
         alpha_np = alpha.cpu().double().numpy()
         gmm = GaussianMixture(n_components=self.cfg.M, covariance_type="full",
-                              reg_covar=1e-4, random_state=0, max_iter=800, n_init=5)
+                              init_params='k-means++',
+                              reg_covar=1e-4, max_iter=800, n_init=30)
         gmm.fit(alpha_np)
 
         def to_tensor(arr):
