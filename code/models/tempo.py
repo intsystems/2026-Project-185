@@ -120,10 +120,16 @@ class TEMPOTrainer:
 
     def _em_loop(self, s: Tensor, x: Tensor, t: Tensor, kappa: Tensor) -> None:
         """EM iterations until convergence or max_em_iters."""
-        for em_iter in range(1, self.cfg.max_em_iters + 1):
+        N = s.shape[0]
+        P = self.alpha.shape[1]
+        # BIC penalty: GMM parameters (means + covariances + mixing weights)
+        k_bic = self.cfg.M * P + self.cfg.M * P * (P + 1) // 2 + (self.cfg.M - 1)
 
-            # E-step: responsibilities from reconstruction error on snapshots s
-            gamma_new = self._e_step(s, x)
+        for em_iter in range(1, self.cfg.max_em_iters + 1):
+            print(f"\n{'─' * 65}")
+
+            # E-step: responsibilities from reconstruction error
+            gamma_new, ll = self._e_step(s, x)
 
             # M1: mixture weights
             pi_new = gamma_new.mean(dim=0)
@@ -137,33 +143,37 @@ class TEMPOTrainer:
             self.mu    = mu_new
             self.Sigma = Sigma_new
 
-            entropy = -(gamma_new * gamma_new.clamp(min=1e-10).log()).sum(dim=1).mean().item()
+            entropy  = -(gamma_new * gamma_new.clamp(min=1e-10).log()).sum(dim=1).mean().item()
+            bic      = -2.0 * ll + k_bic * torch.tensor(N).float().log().item()
             delta_str = " ".join(f"{d:.3e}" for d in delta.tolist())
             pi_str    = " ".join(f"{p:.3f}" for p in pi_new.tolist())
-            print(f"EM {em_iter:3d} | delta=[{delta_str}] | pi=[{pi_str}] | H={entropy:.3f}")
+            print(f"EM {em_iter:3d} | LL={ll:.4e} | BIC={bic:.4e} | H={entropy:.3f}")
+            print(f"       | delta=[{delta_str}] | pi=[{pi_str}]")
 
             # M2: adaptive basis update per regime
             self._m2_step(s, x, t, kappa, gamma_new, delta)
 
             if delta.max().item() < self.cfg.eps_conv:
-                print(f"  converged at iteration {em_iter}")
+                print(f"\n  converged at iteration {em_iter}")
                 break
 
-    def _e_step(self, s: Tensor, x: Tensor) -> Tensor:
-        """Posterior responsibilities gamma (N, M).
+    def _e_step(self, s: Tensor, x: Tensor) -> tuple[Tensor, float]:
+        """Posterior responsibilities gamma (N, M) and log-likelihood.
 
-        gamma_im proportional
-        Reconstruction s_hat_m_i computed in full snapshot space
+        Returns:
+            gamma: (N, M) soft assignments
+            ll:    scalar log-likelihood sum_i log sum_m pi_m p(s_i | m)
         """
         log_p = torch.empty(s.shape[0], self.cfg.M, device=s.device, dtype=s.dtype)
         with torch.no_grad():
             for m, trainer in enumerate(self.trainers):
-                s_hat = trainer.basis(x)                                      # (N, Ny)
-                res_sq = ((s - s_hat) ** 2 * self._w[None, :]).sum(dim=1)    # (N,)
+                s_hat  = trainer.basis(x)                                      # (N, Ny)
+                res_sq = ((s - s_hat) ** 2 * self._w[None, :]).sum(dim=1)     # (N,)
                 log_p[:, m] = self.pi[m].clamp(min=1e-30).log() - res_sq / (2.0 * self.cfg.sigma2)
-        log_p -= log_p.max(dim=1, keepdim=True).values
-        p = log_p.exp()
-        return p / p.sum(dim=1, keepdim=True)
+        log_max = log_p.max(dim=1, keepdim=True).values
+        p = (log_p - log_max).exp()
+        ll = (log_max.squeeze(1) + p.sum(dim=1).log()).sum().item()
+        return p / p.sum(dim=1, keepdim=True), ll
 
     def _compute_stats(self, gamma: Tensor) -> tuple[Tensor, Tensor]:
         """Responsibility-weighted mean (M, P) and covariance (M, P, P) of alpha."""

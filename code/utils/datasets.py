@@ -79,9 +79,11 @@ def download(name: str) -> None:
     print(f"[saved]    {path}  shape={tensor.shape}")
 
 
-def load(name: str) -> dict[str, np.ndarray]:
-    if not os.path.exists(hdf5_path(name)):
-        download(name)
+def load(name: str, path: str = None) -> dict[str, np.ndarray]:
+    if path is None:
+        if not os.path.exists(hdf5_path(name)):
+            download(name)
+        path = hdf5_path(name)
 
-    with h5py.File(hdf5_path(name), "r") as f:
+    with h5py.File(path, "r") as f:
         return {key: f[key][:] for key in f.keys()}

@@ -49,6 +49,7 @@ class FourierNeuralPODConfig:
     pct_start: float = 0.1
     div_factor: float = 25.0
     log_every: int = 20
+    full_batch: bool = False  # if True: skip DataLoader, run full-batch on GPU
 
 
 class FourierNeuralPODTrainer:
@@ -134,63 +135,105 @@ class FourierNeuralPODTrainer:
 
     def _train_mean(self, s_mean: Tensor, x: Tensor, w: Tensor) -> None:
         """Loss: sum_j w_j * (mean_net(x_j) - s_mean_j)^2"""
-        dl = self._make_dataloader(x, s_mean, w)
         opt = AdamW(self.basis.mean_net.parameters(), lr=self.cfg.lr, weight_decay=1e-2)
-        scheduler = OneCycleLR(
-            opt, max_lr=self.cfg.max_lr,
-            epochs=self.cfg.n_epochs_mean, steps_per_epoch=len(dl),
-            anneal_strategy="cos", pct_start=self.cfg.pct_start, div_factor=self.cfg.div_factor,
-        )
         pbar = tqdm(range(self.cfg.n_epochs_mean), desc="mean", leave=False)
-        for epoch in pbar:
-            epoch_loss = 0.0
-            for x_b, mean_b, w_b in dl:
+
+        if self.cfg.full_batch:
+            scheduler = OneCycleLR(
+                opt, max_lr=self.cfg.max_lr,
+                epochs=self.cfg.n_epochs_mean, steps_per_epoch=1,
+                anneal_strategy="cos", pct_start=self.cfg.pct_start, div_factor=self.cfg.div_factor,
+            )
+            for epoch in pbar:
                 opt.zero_grad()
-                pred = self.basis.mean_net(x_b)
-                loss = (w_b * (pred - mean_b) ** 2).sum()
+                pred = self.basis.mean_net(x)
+                loss = (w * (pred - s_mean) ** 2).sum()
                 loss.backward()
                 clip_grad_norm_(self.basis.mean_net.parameters(), self.cfg.grad_clip_norm)
                 opt.step()
                 scheduler.step()
-                epoch_loss += loss.item()
-            if epoch % self.cfg.log_every == 0:
-                avg = epoch_loss / len(dl)
-                self.history.mean_loss.append(avg)
-                pbar.set_postfix(loss=f"{avg:.3e}")
+                if epoch % self.cfg.log_every == 0:
+                    self.history.mean_loss.append(loss.item())
+                    pbar.set_postfix(loss=f"{loss.item():.3e}")
+        else:
+            dl = self._make_dataloader(x, s_mean, w)
+            scheduler = OneCycleLR(
+                opt, max_lr=self.cfg.max_lr,
+                epochs=self.cfg.n_epochs_mean, steps_per_epoch=len(dl),
+                anneal_strategy="cos", pct_start=self.cfg.pct_start, div_factor=self.cfg.div_factor,
+            )
+            for epoch in pbar:
+                epoch_loss = 0.0
+                for x_b, mean_b, w_b in dl:
+                    opt.zero_grad()
+                    pred = self.basis.mean_net(x_b)
+                    loss = (w_b * (pred - mean_b) ** 2).sum()
+                    loss.backward()
+                    clip_grad_norm_(self.basis.mean_net.parameters(), self.cfg.grad_clip_norm)
+                    opt.step()
+                    scheduler.step()
+                    epoch_loss += loss.item()
+                if epoch % self.cfg.log_every == 0:
+                    avg = epoch_loss / len(dl)
+                    self.history.mean_loss.append(avg)
+                    pbar.set_postfix(loss=f"{avg:.3e}")
 
     def _train_mode(
         self, mode: FourierPODMode, r: Tensor, x: Tensor, gamma: Tensor, w: Tensor
     ) -> None:
         """Loss: sum_i gamma_i * sum_j w_j * (phi(x_j) * lambda_i - r_ij)^2"""
-        dl = self._make_dataloader(x, r.T.contiguous(), w)
         opt = AdamW([
             {"params": mode.phi.parameters(), "lr": self.cfg.lr, "weight_decay": 1e-2},
             {"params": [mode.lambda_ten], "lr": self.cfg.lr_lambda, "weight_decay": 0.0},
         ])
-        scheduler = OneCycleLR(
-            opt, max_lr=self.cfg.max_lr,
-            epochs=self.cfg.n_epochs_mode, steps_per_epoch=len(dl),
-            anneal_strategy="cos", pct_start=self.cfg.pct_start, div_factor=self.cfg.div_factor,
-        )
         p = len(self.history.mode_losses) + 1
         pbar = tqdm(range(self.cfg.n_epochs_mode), desc=f"mode {p}", leave=False)
         mode_history: list[float] = []
-        for epoch in pbar:
-            epoch_loss = 0.0
-            for x_b, r_b, w_b in dl:
+
+        if self.cfg.full_batch:
+            scheduler = OneCycleLR(
+                opt, max_lr=self.cfg.max_lr,
+                epochs=self.cfg.n_epochs_mode, steps_per_epoch=1,
+                anneal_strategy="cos", pct_start=self.cfg.pct_start, div_factor=self.cfg.div_factor,
+            )
+            for epoch in pbar:
                 opt.zero_grad()
-                phi  = mode.phi(x_b)                          # (B,)
-                pred = torch.outer(phi, mode.lambda_ten)      # (B, N)
-                loss = ((pred - r_b) ** 2 * gamma[None, :] * w_b[:, None]).sum()
+                phi  = mode.phi(x)                          # (Ny,)
+                pred = torch.outer(phi, mode.lambda_ten)    # (Ny, N)
+                loss = ((pred - r.T) ** 2 * gamma[None, :] * w[:, None]).sum()
                 loss.backward()
                 clip_grad_norm_(
                     list(mode.phi.parameters()) + [mode.lambda_ten], self.cfg.grad_clip_norm,
                 )
                 opt.step()
                 scheduler.step()
-                epoch_loss += loss.item()
-            if epoch % self.cfg.log_every == 0:
-                avg = epoch_loss / len(dl)
-                mode_history.append(avg)
-                pbar.set_postfix(loss=f"{avg:.3e}")
+                if epoch % self.cfg.log_every == 0:
+                    mode_history.append(loss.item())
+                    pbar.set_postfix(loss=f"{loss.item():.3e}")
+        else:
+            dl = self._make_dataloader(x, r.T.contiguous(), w)
+            scheduler = OneCycleLR(
+                opt, max_lr=self.cfg.max_lr,
+                epochs=self.cfg.n_epochs_mode, steps_per_epoch=len(dl),
+                anneal_strategy="cos", pct_start=self.cfg.pct_start, div_factor=self.cfg.div_factor,
+            )
+            for epoch in pbar:
+                epoch_loss = 0.0
+                for x_b, r_b, w_b in dl:
+                    opt.zero_grad()
+                    phi  = mode.phi(x_b)                          # (B,)
+                    pred = torch.outer(phi, mode.lambda_ten)      # (B, N)
+                    loss = ((pred - r_b) ** 2 * gamma[None, :] * w_b[:, None]).sum()
+                    loss.backward()
+                    clip_grad_norm_(
+                        list(mode.phi.parameters()) + [mode.lambda_ten], self.cfg.grad_clip_norm,
+                    )
+                    opt.step()
+                    scheduler.step()
+                    epoch_loss += loss.item()
+                if epoch % self.cfg.log_every == 0:
+                    avg = epoch_loss / len(dl)
+                    mode_history.append(avg)
+                    pbar.set_postfix(loss=f"{avg:.3e}")
+
         self.history.mode_losses.append(mode_history)

@@ -185,3 +185,6 @@ code/notebooks/*.pdf
 
 visuals.ipynb
 snapshots/
+
+requirements.txt
+*.zip
