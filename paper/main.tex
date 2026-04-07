@@ -218,7 +218,7 @@ regime predictions. The training objective balances three goals:
 reconstruction accuracy on $\cD$, consistency of the learned gating
 with the offline regime structure $\{\gamma_{im}^*\}$, and diversity
 across regimes to prevent collapse. The precise architecture and loss
-are given in Section~\ref{sec:method}.
+are given in Section~\ref{sec:theory}.
 
 The quality of the final approximation is measured by the mean
 relative $L^2$ error on held-out test snapshots:
@@ -235,7 +235,490 @@ Phase~2 via gradient descent; details are in Section~\ref{sec:method}.
 \newpage
 
 
-\section{Theory}
+
+
+
+
+
+
+
+
+
+
+
+
+
+\section{Theory}\label{sec:theory}
+
+
+
+All methods studied in this work share a common two-phase structure:
+an \emph{offline} basis-fitting phase that constructs a low-rank
+approximation to the solution manifold from snapshots in $\mathcal{D}$,
+and an \emph{online} operator-learning phase that trains a branch
+network to predict expansion coefficients from a new input
+$(u_0|_{\mathcal{X}_s}, \kappa)$.
+The four methods differ along two independent axes:
+
+\begin{itemize}
+  \item \textbf{Basis type.}
+    A \emph{linear} (POD) basis uses a global SVD of the snapshot
+    matrix; a \emph{nonlinear} (NeuralPOD) basis learns spatiotemporal
+    mode networks by sequential residual minimization.
+  \item \textbf{Number of regimes.}
+    A \emph{single-regime} operator fits one global basis to all
+    snapshots; a \emph{multi-regime} operator (TEMPO) discovers $M$
+    latent regimes via EM and assigns a dedicated basis to each.
+\end{itemize}
+
+\noindent
+This gives four combinations:
+POD-DeepONet~\cite{Lu2022} (linear, global),
+NeuralPOD-DeepONet (nonlinear, global, our extension of~\cite{Mou2026}),
+TEMPO(POD) (linear, $M$ regimes), and
+TEMPO(NeuralPOD) (nonlinear, $M$ regimes).
+Sections~\ref{sec:bases}--\ref{sec:online} develop each component.
+
+
+\subsection{Basis Representations}\label{sec:bases}
+
+
+\subsubsection{POD Basis}
+
+Given $N$ training snapshots arranged as columns of
+$S \in \mathbb{R}^{N_y \times N}$, the rank-$K$ truncated SVD
+$S \approx U_K \Sigma_K V_K^\top$
+yields orthonormal spatial modes $\{\phi_k\}_{k=1}^K$
+(columns of $U_K$) and scalar coefficients
+$\lambda_k^{(i)} = [\Sigma_K V_K^\top]_{ki}$.
+The approximation
+\begin{equation}
+  \hat{s}^{(i)}(x,t)
+  = \sum_{k=1}^{K} \lambda_k^{(i)}\,\phi_k(x,t)
+  \label{eq:pod_approx}
+\end{equation}
+is optimal in the $L^2$ sense among all rank-$K$ linear representations.
+The basis does not depend on $\kappa$: a single set of directions must
+represent solutions across the entire parameter space $\mathcal{K}$.
+
+\subsubsection{NeuralPOD Basis}\label{sec:neuralpod_basis}
+
+To overcome the linearity constraint, we parametrize each basis
+function as an MLP $\phi_k : \Omega \times \mathcal{T} \to \mathbb{R}$
+and learn scalar coefficients $\{\lambda_k^{(i)}\}$ jointly by
+\emph{greedy residual minimization}~\cite{Mou2026}.
+Let $r^{(0),i} = s^{(i)} - \phi_0$, where $\phi_0$ is a learned mean
+network.
+For each subsequent mode $k \ge 1$, given the residual
+\begin{equation}
+  r^{(k-1),i}(x,t)
+  = s^{(i)}(x,t)
+  - \phi_0(x,t)
+  - \sum_{j=1}^{k-1}\phi_j(x,t)\,\lambda_j^{(i)},
+  \label{eq:residual_global}
+\end{equation}
+we solve
+\begin{equation}
+  \min_{\phi_k,\,\{\lambda_k^{(i)}\}}
+  \frac{1}{N}\sum_{i=1}^{N}
+  \bigl\|r^{(k-1),i} - \phi_k\cdot\lambda_k^{(i)}\bigr\|^2.
+  \label{eq:neuralpod_loss}
+\end{equation}
+Mode addition continues until the mean residual norm falls below
+$\mathrm{Tol}$ or $k = K_{\max}$.
+This procedure is the nonlinear analogue of Gram--Schmidt
+orthogonalization in function space: each mode extracts the largest
+component of the variance unexplained by the previous modes, without
+constraining those components to lie in a fixed linear subspace.
+
+\subsection{Single-Regime Operators}\label{sec:single}
+
+
+\subsubsection{POD-DeepONet}
+
+POD-DeepONet~\cite{Lu2022} replaces the learned trunk network of
+DeepONet~\cite{Lu2019} with the fixed POD basis.
+After computing the global modes $\{\phi_k\}_{k=1}^K$ and training
+coefficients $\{\boldsymbol{\lambda}^{(i)}\}$ offline, a branch network
+$\mathcal{B}_\theta : \mathbb{R}^{m_s + d_\kappa} \to \mathbb{R}^K$
+is trained online by regression against these coefficients:
+\begin{equation}
+  \mathcal{L}_{\mathrm{branch}}
+  = \frac{1}{N}\sum_{i=1}^{N}
+    \bigl\|\mathcal{B}_\theta(u_0^{(i)}|_{\mathcal{X}_s},\,\kappa^{(i)})
+    - \boldsymbol{\lambda}^{(i)}\bigr\|^2.
+  \label{eq:pod_branch_loss}
+\end{equation}
+The prediction at any $(x,t) \in \Omega \times \mathcal{T}$ is
+\begin{equation}
+  \hat{s}(x,t;\,u_0,\kappa)
+  = \phi_0(x,t)
+  + \sum_{k=1}^{K}
+    \mathcal{B}_{\theta,k}(u_0|_{\mathcal{X}_s},\kappa)\,\phi_k(x,t).
+  \label{eq:pod_predict}
+\end{equation}
+
+\subsubsection{NeuralPOD-DeepONet}\label{sec:neuralpod_deeponet}
+
+Mou et al.~\cite{Mou2026} introduce NeuralPOD as a dimensionality
+reduction for PDE solutions, establishing the greedy basis-fitting
+procedure of Section~\ref{sec:neuralpod_basis}.
+However, they do not construct a deployable solution operator: no
+network is proposed to predict the mode coefficients for an unseen
+initial condition.
+We close this gap by substituting the NeuralPOD basis into the
+POD-DeepONet framework.
+
+\paragraph{Phase 1 (offline).}
+Train the global NeuralPOD basis
+$\{\phi_0, \phi_1, \ldots, \phi_K\}$
+on all $N$ training snapshots by the procedure of
+Section~\ref{sec:neuralpod_basis}, obtaining coefficients
+$\boldsymbol{\lambda}^{(i)} \in \mathbb{R}^K$ for each snapshot.
+
+\paragraph{Phase 2 (online).}
+Fix the NeuralPOD basis. Train a branch network
+$\mathcal{B}_\theta : \mathbb{R}^{m_s + d_\kappa} \to \mathbb{R}^K$
+by minimizing~\eqref{eq:pod_branch_loss} with the NeuralPOD
+coefficients as regression targets.
+
+\paragraph{Prediction.}
+The inference formula is identical to~\eqref{eq:pod_predict}, with
+the NeuralPOD networks substituted for the POD modes.
+Because the nonlinear basis captures solution structure that lies
+off any fixed linear subspace, this operator spans a strictly richer
+function space than POD-DeepONet at the same mode count $K$.
+
+
+\subsection{TEMPO: Offline Regime Discovery}\label{sec:offline}
+
+
+A single global basis — whether linear or nonlinear — must compromise
+between qualitatively distinct solution regimes.
+For problems such as Burgers' equation, where small viscosity produces
+sharp shock structures and large viscosity yields smooth diffusion, the
+optimal basis geometry differs fundamentally between regimes.
+TEMPO avoids this compromise by constructing a dedicated basis for each
+of $M$ latent regimes, discovered from unlabelled snapshots via
+Expectation--Maximization on the generative model of
+Definition~\ref{def:generative}.
+
+Under regime $m$, the NeuralPOD approximation takes a
+\emph{parameter-conditioned separable form}:
+\begin{equation}
+  \hat{s}_m^{(i)}(x)
+  = \phi_0^{(m)}\!\left(x;\kappa^{(i)}\right)
+  + \sum_{p=1}^{P_m}
+    \phi_p^{(m)}\!\left(x;\kappa^{(i)}\right)
+    \psi_p^{(m)}\!\left(t^{(i)};\kappa^{(i)}\right),
+  \label{eq:neuralpod_regime}
+\end{equation}
+where $\phi_p^{(m)}(\cdot;\kappa)$ and $\psi_p^{(m)}(\cdot;\kappa)$ are
+separate spatial and temporal networks conditioned on $\kappa$.
+This differs from the single-regime basis of Section~\ref{sec:neuralpod_basis}
+in two respects: the basis is \emph{split across space and time}
+(enabling the branch network to supply only scalar coefficients per mode),
+and it is \emph{conditioned on $\kappa$}, so that the same networks
+generalize continuously across the full parameter space $\mathcal{K}$
+without retraining.
+
+\paragraph{Initialization.}
+A global POD is computed on all $N$ snapshots; each snapshot is
+projected to a $P$-dimensional coefficient vector
+$\alpha^{(i)} \in \mathbb{R}^P$.
+Running a standard GMM on $\{\alpha^{(i)}\}$ yields initial
+responsibilities $\gamma_{im}^{(0)}$, weights $\pi_m^{(0)}$,
+and per-regime statistics $(\mu_m^{(0)}, \Sigma_m^{(0)})$.
+Each regime basis $\Phi_m^{(0)}$ is initialized by
+\textsc{WeightedNeuralPOD} (Algorithm~\ref{alg:npod}) with weights
+$\{\gamma_{im}^{(0)}\}$.
+
+\paragraph{E-step.}
+At iteration $t$, the posterior regime responsibility for snapshot $i$
+follows directly from Bayes' theorem applied to the Gaussian likelihood
+of Definition~\ref{def:generative}:
+\begin{equation}
+  \gamma_{im}^{(t)}
+  = \frac{
+    \pi_m^{(t-1)}\,
+    \exp\!\Bigl(-\dfrac{\|s^{(i)}-\hat{s}_m^{(i)}\|^2}{2\sigma^2}\Bigr)
+  }{
+    \sum_{j=1}^{M}
+    \pi_j^{(t-1)}\,
+    \exp\!\Bigl(-\dfrac{\|s^{(i)}-\hat{s}_j^{(i)}\|^2}{2\sigma^2}\Bigr)
+  },
+  \label{eq:estep}
+\end{equation}
+where $\hat{s}_m^{(i)}$ is evaluated via~\eqref{eq:neuralpod_regime}
+using $\Phi_m^{(t-1)}$ and $\kappa^{(i)}$.
+Crucially, as the NeuralPOD bases improve in the M-step, the
+reconstructions $\hat{s}_m^{(i)}$ sharpen, and the E-step
+automatically refines the regime assignments in response.
+This coupling distinguishes TEMPO from a GMM applied to a fixed
+feature space.
+
+\paragraph{M-step.}
+Maximizing the expected complete-data log-likelihood with
+responsibilities fixed yields a closed-form update for the mixture
+weights,
+\begin{equation}
+  \pi_m^{(t)} \leftarrow \frac{N_m^{(t)}}{N},
+  \qquad N_m^{(t)} = \sum_{i=1}^{N}\gamma_{im}^{(t)},
+  \label{eq:mstep_pi}
+\end{equation}
+and a weighted reconstruction problem for each basis:
+\begin{equation}
+  \min_{\Phi_m}
+  \sum_{i=1}^{N} \gamma_{im}^{(t)}\,\|s^{(i)} - \hat{s}_m^{(i)}\|^2,
+  \label{eq:mstep_phi}
+\end{equation}
+solved via \textsc{WeightedNeuralPOD} (Algorithm~\ref{alg:npod}).
+Because this subproblem is minimized by gradient descent rather than
+to global optimality, TEMPO is a Generalized EM
+algorithm~\cite{Neal1998}: it guarantees monotone non-decrease of the
+observed-data log-likelihood at every iteration under the
+sufficient condition that each M-step does not decrease the
+Q-function.
+
+\paragraph{Adaptive basis update.}
+Retraining all $M$ NeuralPOD bases at every EM iteration is
+computationally prohibitive.
+We introduce a distribution-shift criterion to determine whether each
+basis requires updating.
+Let $\alpha^{(i)}$ denote the global POD projection of $s^{(i)}$,
+computed once during initialization and fixed thereafter.
+The responsibility-weighted first and second moments of regime $m$ are
+\begin{align}
+  \mu_m^{(t)}
+  &= \frac{1}{N_m^{(t)}}\sum_{i=1}^N
+    \gamma_{im}^{(t)}\,\alpha^{(i)},
+  \label{eq:mu}\\
+  \Sigma_m^{(t)}
+  &= \frac{1}{N_m^{(t)}}\sum_{i=1}^N
+    \gamma_{im}^{(t)}\,
+    (\alpha^{(i)}-\mu_m^{(t)})(\alpha^{(i)}-\mu_m^{(t)})^\top.
+  \label{eq:Sigma}
+\end{align}
+The distribution-shift criterion measures the relative change in these
+moments between consecutive iterations:
+\begin{equation}
+  \Delta_m^{(t)}
+  = \frac{\|\mu_m^{(t)} - \mu_m^{(t-1)}\|_2}
+         {\|\mu_m^{(t-1)}\|_2 + \epsilon}
+  + \frac{\|\Sigma_m^{(t)} - \Sigma_m^{(t-1)}\|_F}
+         {\|\Sigma_m^{(t-1)}\|_F + \epsilon}.
+  \label{eq:Delta}
+\end{equation}
+Note that $\Delta_m^{(t)}$ tracks the shift in the \emph{data content}
+of regime $m$ — the snapshots it effectively owns — not merely
+the volume of responsibility reassignments.
+Two snapshots with very different $\alpha^{(i)}$ swapping regime
+membership produce a large $\Delta_m^{(t)}$, triggering a basis
+update; two similar snapshots doing the same do not.
+Given thresholds $0 < \varepsilon_s < \varepsilon_l$, the update
+decision at iteration $t$ follows a three-way rule:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{lll}
+\toprule
+Condition & Action & Rationale \\
+\midrule
+$\Delta_m^{(t)} < \varepsilon_s$
+  & \textsc{Skip}
+  & Data manifold unchanged; basis remains accurate \\
+$\varepsilon_s \le \Delta_m^{(t)} < \varepsilon_l$
+  & \textsc{Incremental}
+  & Moderate drift; add or prune one mode \\
+$\Delta_m^{(t)} \ge \varepsilon_l$
+  & \textsc{Full rerun}
+  & Large shift; rebuild from random initialization \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+In the \textsc{Incremental} case, we compute the residual of the
+current basis under the updated responsibilities $\gamma^{(t)}$, add
+a new mode if $\|r_m^{(P_m)}\|_{\gamma_m^{(t)}}^2 \ge \mathrm{Tol}_m$,
+and prune the last mode if its weighted contribution falls below
+$\varepsilon_p$.
+The \textsc{Full rerun} case uses a cold-start random initialization.
+When $\Delta_m^{(t)} \ge \varepsilon_l$, the parameters
+$\Phi_m^{(t-1)}$ are a local minimum of the \emph{previous}
+weighted objective and may be in a basin that is entirely
+misaligned with the new weighted objective; warm-starting would
+trap gradient descent there, encoding the old regime's features
+in the new basis.
+
+\paragraph{Convergence and model selection.}
+EM terminates when $\max_m \Delta_m^{(t)} < \varepsilon_c$.
+The number of regimes $M \in \{2,3,4\}$ is selected by jointly
+minimizing BIC on the GMM fit and mean assignment entropy;
+see Table~\ref{tab:regime_selection}.
+
+\begin{algorithm}[t]
+\caption{\textsc{WeightedNeuralPOD}$\bigl(
+  \{s^{(i)}, t^{(i)}, \kappa^{(i)}, \gamma_{im}\}_{i=1}^N,\;
+  \mathrm{Tol}_m\bigr)$}
+\label{alg:npod}
+\begin{algorithmic}[1]
+\State Train $\phi_0^{(m)}(\cdot\,;\kappa)$ by minimizing
+  $\sum_i \gamma_{im}\,
+  \|s^{(i)} - \phi_0^{(m)}(\cdot\,;\kappa^{(i)})\|^2$
+\State $r^{(0),i} \leftarrow
+  s^{(i)} - \phi_0^{(m)}(\cdot\,;\kappa^{(i)})$
+  for all $i$;\enspace $p \leftarrow 0$
+\While{$\displaystyle\sum_{i=1}^N
+  \gamma_{im}\,\|r^{(p),i}\|^2 \;\ge\; \mathrm{Tol}_m$}
+  \State $p \leftarrow p + 1$
+  \State Randomly initialize
+    $\phi_p^{(m)}(\cdot\,;\kappa)$ and $\psi_p^{(m)}(\cdot\,;\kappa)$
+  \State Minimize $\displaystyle\sum_{i=1}^N \gamma_{im}
+    \bigl\|r^{(p-1),i}
+    - \phi_p^{(m)}(\cdot\,;\kappa^{(i)})\,
+      \psi_p^{(m)}(t^{(i)};\kappa^{(i)})\bigr\|^2$
+    over $\phi_p^{(m)}, \psi_p^{(m)}$
+  \State $r^{(p),i} \leftarrow r^{(p-1),i}
+    - \phi_p^{(m)}(\cdot\,;\kappa^{(i)})\,
+      \psi_p^{(m)}(t^{(i)};\kappa^{(i)})$
+    \enspace for all $i$
+\EndWhile
+\State \Return $P_m \!\leftarrow\! p$,\enspace
+  $\phi_0^{(m)}$,\enspace
+  $\bigl\{\phi_p^{(m)},\psi_p^{(m)}\bigr\}_{p=1}^{P_m}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\caption{TEMPO --- Offline Phase}
+\label{alg:tempo}
+\begin{algorithmic}[1]
+\Require $\mathcal{D} = \{s^{(i)}, t^{(i)}, \kappa^{(i)}\}_{i=1}^N$;\;
+  $M,\;\sigma^2,\;\varepsilon_s,\;\varepsilon_l,\;\varepsilon_p,\;
+  \varepsilon_c,\;\{\mathrm{Tol}_m\}_{m=1}^M$
+\Ensure Regime bases $\{\Phi_m^*\}$,\;
+  responsibilities $\{\gamma_{im}^*\}$,\;
+  weights $\{\pi_m^*\}$
+%
+\Statex \textit{Initialization}
+\State Compute global POD on $\{s^{(i)}\}$;
+  project to $\alpha^{(i)} \in \mathbb{R}^P$ for all $i$
+\State Run GMM-EM on $\{\alpha^{(i)}\}$ $\to$
+  $\gamma_{im}^{(0)},\;\pi_m^{(0)},\;\mu_m^{(0)},\;\Sigma_m^{(0)}$
+\For{$m = 1,\ldots,M$}
+  \State $\Phi_m^{(0)} \leftarrow$
+    \Call{WeightedNeuralPOD}
+    {$\{s^{(i)},t^{(i)},\kappa^{(i)},\gamma_{im}^{(0)}\},\,\mathrm{Tol}_m$}
+\EndFor
+%
+\Statex \textit{EM iterations}
+\Repeat
+  \Statex \quad\textit{E-step}
+  \For{all $i = 1,\ldots,N$ and $m = 1,\ldots,M$}
+    \State Compute $\hat{s}_m^{(i)}$ via~\eqref{eq:neuralpod_regime}
+      using $\Phi_m^{(t-1)}$ and $\kappa^{(i)}$
+    \State $\gamma_{im}^{(t)} \leftarrow$ Eq.~\eqref{eq:estep}
+  \EndFor
+  \Statex \quad\textit{M-step: mixture weights}
+  \State $\pi_m^{(t)} \leftarrow N_m^{(t)}/N$
+    for all $m$ \hfill\eqref{eq:mstep_pi}
+  \Statex \quad\textit{M-step: bases}
+  \For{$m = 1,\ldots,M$}
+    \State Compute $\mu_m^{(t)}$~\eqref{eq:mu},\;
+      $\Sigma_m^{(t)}$~\eqref{eq:Sigma},\;
+      $\Delta_m^{(t)}$~\eqref{eq:Delta}
+    \If{$\Delta_m^{(t)} < \varepsilon_s$}
+      \State $\Phi_m^{(t)} \leftarrow \Phi_m^{(t-1)}$
+        \hfill \textsc{Skip}
+    \ElsIf{$\Delta_m^{(t)} < \varepsilon_l$}
+      \hfill \textsc{Incremental}
+      \State Compute $r_m^{(P_m)}$ under updated $\gamma^{(t)}$
+      \If{$\|r_m^{(P_m)}\|_{\gamma_m^{(t)}}^2 \ge \mathrm{Tol}_m$}
+        \State Train mode $P_m{+}1$;\; $P_m \leftarrow P_m + 1$
+      \EndIf
+      \If{weighted contribution of mode $P_m < \varepsilon_p$}
+        \State $P_m \leftarrow P_m - 1$
+      \EndIf
+    \Else
+      \hfill \textsc{Full rerun}
+      \State $\Phi_m^{(t)} \leftarrow$
+        \Call{WeightedNeuralPOD}
+        {$\{s^{(i)},t^{(i)},\kappa^{(i)},\gamma_{im}^{(t)}\},\,\mathrm{Tol}_m$}
+    \EndIf
+  \EndFor
+\Until{$\max_m \Delta_m^{(t)} < \varepsilon_c$}
+\State \Return $\Phi_m^* \!\leftarrow\! \Phi_m^{(t)}$,\;
+  $\gamma_{im}^* \!\leftarrow\! \gamma_{im}^{(t)}$,\;
+  $\pi_m^* \!\leftarrow\! \pi_m^{(t)}$
+\end{algorithmic}
+\end{algorithm}
+
+
+\subsection{TEMPO: Online Gated Operator}\label{sec:online}
+
+
+After Algorithm~\ref{alg:tempo} converges, all NeuralPOD bases
+$\{\Phi_m^*\}$ and responsibilities $\{\gamma_{im}^*\}$ are frozen.
+The online phase trains a \textbf{GatingNet}
+$\mathcal{W}: \mathbb{R}^{m_s + d_\kappa} \to \Delta^{M-1}$
+and $M$ \textbf{BranchNets}
+$\mathcal{B}_m: \mathbb{R}^{m_s + d_\kappa} \to \mathbb{R}^{P_m}$,
+each mapping sensor observations $u_0|_{\mathcal{X}_s}$ and parameter
+$\kappa$ to regime weights and expansion coefficients, respectively.
+The TEMPO prediction at query point $x \in \Omega$ is
+\begin{equation}
+  \hat{s}(x;\,u_0,\kappa)
+  = \sum_{m=1}^{M} w_m(u_0,\kappa)
+    \left[
+      \phi_0^{(m)}\!(x;\kappa)
+      + \sum_{k=1}^{P_m}
+        b_{m,k}(u_0,\kappa)\;
+        \phi_k^{(m)}\!(x;\kappa)
+    \right],
+  \label{eq:predict}
+\end{equation}
+where $\mathbf{w} = \mathcal{W}(u_0|_{\mathcal{X}_s},\kappa)$ and
+$\mathbf{b}_m = \mathcal{B}_m(u_0|_{\mathcal{X}_s},\kappa)$.
+The prediction is mesh-free and evaluable at any $x \in \Omega$
+without retraining.
+
+\paragraph{Training objective.}
+Writing $w_m^{(i)} = w_m(u_0^{(i)},\kappa^{(i)})$, the online loss is
+\begin{equation}
+  \mathcal{L}_{\mathrm{online}}
+  = \underbrace{
+      \frac{1}{N}\sum_{i=1}^{N}
+      \|s^{(i)} - \hat{s}(\cdot;\,u_0^{(i)},\kappa^{(i)})\|^2
+    }_{\mathcal{L}_{\mathrm{data}}}
+  +\;\lambda_{\mathrm{KL}}
+    \underbrace{
+      \frac{1}{N}\sum_{i,m}
+      w_m^{(i)}\log\frac{w_m^{(i)}}{\gamma_{im}^*}
+    }_{\mathcal{L}_{\mathrm{KL}}}
+  -\;\lambda_{H}
+    \underbrace{
+      \frac{1}{N}\sum_{i,m}
+      w_m^{(i)}\log w_m^{(i)}
+    }_{-\mathcal{L}_{\mathrm{ent}}}.
+  \label{eq:online_loss}
+\end{equation}
+$\mathcal{L}_{\mathrm{data}}$ drives reconstruction accuracy.
+$\mathcal{L}_{\mathrm{KL}}$ anchors the online gating to the
+offline regime partition: it penalizes deviation of $\mathbf{w}^{(i)}$
+from the EM responsibilities $\boldsymbol{\gamma}_i^*$, so the
+network cannot discard the discovered structure in pursuit of a
+simpler routing.
+$\mathcal{L}_{\mathrm{ent}}$ prevents collapse to a single expert,
+ensuring all $M$ regime bases contribute.
+The hyperparameters $\lambda_{\mathrm{KL}}, \lambda_H \ge 0$ trade
+off these objectives.
+
+
+
+
+
+
 
 \newpage
 
@@ -420,94 +903,6 @@ TEMPO(POD) \textit{(ours)}                & -- & -- & -- \\
 
 
 \newpage
-
-TODOOO 
-
-
-METHOD OR STATEMENT???????????????????? 
-
-
-
-\begin{definition}[TEMPO predictor]
-\label{def:predictor}
-Given input function $u$ sampled at sensor locations and parameter $\kappa$, the TEMPO prediction at query point $x \in \Omega$ is
-\begin{equation}
-  \hat{s}(x;\,u,\kappa)
-  \;=\; \sum_{m=1}^{M} w_m(u,\kappa)
-    \!\left[\,
-      \Phi_0^{(m)}\!(x;\kappa)
-      + \sum_{k=1}^{P_m} b_{m,k}(u,\kappa)\;
-        \Phi_k^{(m)}\!(x;\kappa)
-    \right],
-  \label{eq:predict}
-\end{equation}
-where $w_m(u,\kappa) \in [0,1]$, $\sum_m w_m = 1$, are the \emph{GatingNet} outputs, and $b_{m,k}(u,\kappa)$ are the \emph{BranchNet} expansion coefficients for regime $m$
-
-\end{definition}
-
-
-Online
-
-\begin{align}
-  \mathcal{L}_\mathrm{data} &= \frac{1}{N}\sum_{i=1}^N
-    \normsq{s^{(i)} - \hat{s}(\cdot;\,u^{(i)},\kappa^{(i)})},
-  \label{eq:loss_data}\\
-  \mathcal{L}_\mathrm{KL} &= \frac{1}{N}\sum_{i,m}
-    w_m^{(i)}\log\frac{w_m^{(i)}}{\gamma_{im}^*},
-  \label{eq:loss_kl}\\
-  \mathcal{L}_\mathrm{ent} &= -\frac{1}{N}\sum_{i,m}
-    w_m^{(i)}\log w_m^{(i)},
-  \label{eq:loss_ent}
-\end{align}
-combined as
-\begin{equation}
-  (W^*,B^*) = \operatorname*{arg\,min}_{W,\,B}\;
-  \mathcal{L}_\mathrm{online},
-  \qquad
-  \mathcal{L}_\mathrm{online} =
-  \mathcal{L}_\mathrm{data}
-  + \lambda_\KL\,\mathcal{L}_\mathrm{KL}
-  - \lambda_H\,\mathcal{L}_\mathrm{ent},
-  \label{eq:online}
-\end{equation}
-
-
-
-
-\textbf{Outline.} The rest of the paper is organized as follows...
-
-\section{Related Work}\label{sec:rw}
-
-\textbf{Topic \#1.}
-TODO
-
-\textbf{Topic \#2.}
-TODO
-
-\section{Preliminaries}\label{sec:prelim}
-
-\subsection{General notation}
-
-In this section, we introduce the general notation used in the rest of the paper and the basic assumptions. 
-
-\subsection{Assumptions} 
-
-TODO
-
-\section{Method}\label{sec:method}
-
-\section{Experiments}\label{sec:exp}
-
-To verify the theoretical estimates obtained, we conducted a detailed empirical study...
-
-\section{Discussion}\label{sec:disc}
-
-TODO
-
-\section{Conclusion}\label{sec:concl}
-
-TODO
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
