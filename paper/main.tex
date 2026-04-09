@@ -117,9 +117,9 @@ Let $\Omega \subset \R^d$ be a bounded spatial domain and $\T \subset \R_{\geq 0
 
 We are given a dataset of $N$ solution snapshots:
 \begin{equation}
-  \cD = \bigl\{\,(u^{(i)},\,\kappa^{(i)},\,t^{(i)},\,s^{(i)})\,\bigr\}_{i=1}^{N},
+  \cD = \bigl\{\,(u^{(i)}_0,\,\kappa^{(i)},\,t^{(i)},\,s^{(i)})\,\bigr\}_{i=1}^{N},
   \qquad
-  s^{(i)}(\cdot) = s\!\left(\cdot,\,t^{(i)};\,u^{(i)},\kappa^{(i)}\right)
+  s^{(i)}(\cdot) = s\!\left(\cdot,\,t^{(i)};\,u^{(i)}_0,\kappa^{(i)}\right)
   \in L^2(\Omega),
   \label{eq:dataset}
 \end{equation}
@@ -132,8 +132,8 @@ The dataset $\cD$ captures $\cG$ through a finite collection of snapshots; the u
 \label{def:operator}
 The \emph{solution operator}
  \[ \cG: \mathcal{U} \times \cK \to L^2(\Omega \times \T) \]
-maps each pair $(u,\kappa)$ to the full space-time solution:
-$\cG(u,\kappa) = s(\,\cdot\,,\,\cdot\,;\,u,\kappa)$.
+maps each pair $(u_0,\kappa)$ to the full space-time solution:
+$\cG(u_0,\kappa) = s(\,\cdot\,,\,\cdot\,;\,u_0,\kappa)$.
 \end{definition}
 
 
@@ -231,7 +231,7 @@ relative $L^2$ error on held-out test snapshots:
 \end{equation}
 
 \textit{The algorithm} solves Phase~1 via EM and 
-Phase~2 via gradient descent; details are in Section~\ref{sec:method}.
+Phase~2 via gradient descent; details are in Section~\ref{sec:theory}.
 \newpage
 
 
@@ -257,7 +257,7 @@ an \emph{offline} basis-fitting phase that constructs a low-rank
 approximation to the solution manifold from snapshots in $\mathcal{D}$,
 and an \emph{online} operator-learning phase that trains a branch
 network to predict expansion coefficients from a new input
-$(u_0|_{\mathcal{X}_s}, \kappa)$.
+$(u_0, \kappa)$.
 The four methods differ along two independent axes:
 
 \begin{itemize}
@@ -339,14 +339,14 @@ constraining those components to lie in a fixed linear subspace.
 POD-DeepONet~\cite{Lu2022} replaces the learned trunk network of
 DeepONet~\cite{Lu2019} with the fixed POD basis.
 After computing the global modes $\{\phi_k\}_{k=1}^K$ and training
-coefficients $\{\boldsymbol{\lambda}^{(i)}\}$ offline, a branch network
+coefficients $\{\lambda^{(i)}\}$ offline, a branch network
 $\mathcal{B}_\theta : \mathbb{R}^{m_s + d_\kappa} \to \mathbb{R}^K$
 is trained online by regression against these coefficients:
 \begin{equation}
   \mathcal{L}_{\mathrm{branch}}
   = \frac{1}{N}\sum_{i=1}^{N}
-    \bigl\|\mathcal{B}_\theta(u_0^{(i)}|_{\mathcal{X}_s},\,\kappa^{(i)})
-    - \boldsymbol{\lambda}^{(i)}\bigr\|^2.
+    \bigl\|\mathcal{B}_\theta(u_0^{(i)},\,\kappa^{(i)})
+    - \lambda^{(i)}\bigr\|^2.
   \label{eq:pod_branch_loss}
 \end{equation}
 The prediction at any $(x,t) \in \Omega \times \mathcal{T}$ is
@@ -354,7 +354,7 @@ The prediction at any $(x,t) \in \Omega \times \mathcal{T}$ is
   \hat{s}(x,t;\,u_0,\kappa)
   = \phi_0(x,t)
   + \sum_{k=1}^{K}
-    \mathcal{B}_{\theta,k}(u_0|_{\mathcal{X}_s},\kappa)\,\phi_k(x,t).
+    \mathcal{B}_{\theta,k}(u_0,\kappa)\,\phi_k(x,t).
   \label{eq:pod_predict}
 \end{equation}
 
@@ -664,7 +664,7 @@ The online phase trains a \textbf{GatingNet}
 $\mathcal{W}: \mathbb{R}^{m_s + d_\kappa} \to \Delta^{M-1}$
 and $M$ \textbf{BranchNets}
 $\mathcal{B}_m: \mathbb{R}^{m_s + d_\kappa} \to \mathbb{R}^{P_m}$,
-each mapping sensor observations $u_0|_{\mathcal{X}_s}$ and parameter
+each mapping sensor observations $u_0}$ and parameter
 $\kappa$ to regime weights and expansion coefficients, respectively.
 The TEMPO prediction at query point $x \in \Omega$ is
 \begin{equation}
@@ -678,8 +678,8 @@ The TEMPO prediction at query point $x \in \Omega$ is
     \right],
   \label{eq:predict}
 \end{equation}
-where $\mathbf{w} = \mathcal{W}(u_0|_{\mathcal{X}_s},\kappa)$ and
-$\mathbf{b}_m = \mathcal{B}_m(u_0|_{\mathcal{X}_s},\kappa)$.
+where $\mathbf{w} = \mathcal{W}(u_0,\kappa)$ and
+$\mathbf{b}_m = \mathcal{B}_m(u_0,\kappa)$.
 The prediction is mesh-free and evaluable at any $x \in \Omega$
 without retraining.
 
@@ -792,7 +792,7 @@ lower entropy indicates more confident regime assignments.
 Table~\ref{tab:regime_selection} reports both criteria;
 $M=3$ achieves the best trade-off and is used throughout.
 
-\begin{table}[H]
+\begin{table}[h]
 \centering
 \caption{Regime selection on 1D Burgers'}
 \label{tab:regime_selection}
@@ -818,7 +818,7 @@ The GMM fit in POD coefficient space $(\alpha_1, \alpha_2)$
 demonstrates that regime separation is well-captured in the
 low-dimensional projection used for clustering.
 
-\begin{figure}[H]
+\begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/NEW-t_sne.png}
 \caption{t-SNE projection of Burgers' snapshots
@@ -850,7 +850,7 @@ for large $\nu$ the modes are smooth and global, while for
 small $\nu$ they are sharply localised near the shock front,
 demonstrating the parameter-adaptivity of the NeuralPOD basis.
 
-\begin{figure}[H]
+\begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/output_FNO.png}
 \caption{Fourier NeuralPOD training dynamics on 1D Burgers'}
@@ -871,7 +871,7 @@ averaged over all viscosity values.
 Figure~\ref{fig:reconstruct} shows space--time heatmaps of
 representative predictions and point-wise absolute errors.
 
-\begin{table}[H]
+\begin{table}[h]
 \centering
 \caption{Reconstruction accuracy on the 1D Burgers' test set.}
 \label{tab:results}
@@ -891,7 +891,7 @@ TEMPO(POD) \textit{(ours)}                & -- & -- & -- \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[H]
+\begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/reconstruct.png}
 \caption{Space--time reconstruction at $\nu=1.0$:
@@ -903,6 +903,7 @@ TEMPO(POD) \textit{(ours)}                & -- & -- & -- \\
 
 
 \newpage
+\clearpage
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
