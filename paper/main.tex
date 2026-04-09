@@ -94,7 +94,7 @@ We propose TEMPO: a framework that identifies latent dynamical regimes in snapsh
 
 Operator learning addresses the approximation of mappings between infinite-dimensional function spaces, arising naturally in the solution of parametric partial differential equations (PDEs) governing physical systems~\cite{Kovachki2024}. This paradigm has demonstrated substantial promise across both  theoretical analysis~\cite{Kovachki2024, Lu2019} and practical applications including weather modeling, quantum systems, fluid and sound dynamics~\cite{Pathak2022, Olivieri2024,  Dave2025, Tucker2025}.
 
-Among the most prominent architectures, Deep Operator Networks (DeepONet)~\cite{Lu2019} approximate operators via paired branch and trunk networks, where the branch encodes the input function and the trunk encodes the query location.The Fourier Neural Operator (FNO)~\cite{Li2020} independently parameterizes the solution operator in the spectral domain, offering resolution-invariance and strong empirical performance. POD-DeepONet~\cite{Lu2022} improves upon standard DeepONet by replacing the learned trunk network with a fixed basis obtained from Proper Orthogonal Decomposition (POD) of training snapshots, yielding more compact and interpretable representations
+Among the most prominent architectures, Deep Operator Networks (DeepONet)~\cite{Lu2019} approximate operators via paired branch and trunk networks, where the branch encodes the input function and the trunk encodes the query location.The Fourier Neural Operator (FNO)~\cite{Li2020} independently parameterizes the solution operator in the spectral domain, offering resolution-invariance and strong empirical performance. POD-DeepONet~\cite{Lu2022} improves upon standard DeepONet by replacing the learned trunk network with a fixed basis obtained from Proper Orthogonal Decomposition (POD) of training snapshots, yielding more compact and interpretable representations.
 
 However, a single global POD basis is inherently limited for problems whose solutions exhibit qualitatively distinct dynamical regimes — such as solutions transitioning between laminar and turbulent behavior, or dispersive waves with parameter-dependent structure. In such settings, the optimal basis varies across the solution manifold, and a single linear subspace cannot represent the full solution diversity.
 
@@ -123,7 +123,7 @@ We are given a dataset of $N$ solution snapshots:
   \in L^2(\Omega),
   \label{eq:dataset}
 \end{equation}
-where $u^{(i)} \in \mathcal{U} = L^2(\Omega)$ is the input function, $\kappa^{(i)} \in \cK$ the physical parameter, $t^{(i)} \in \T$ the observation time, and $s^{(i)}$ the corresponding solution discretized on $N_y$ quadrature points $\{(x_j, w_j)\}_{j=1}^{N_y}$ with norm $\normsq{f} = \sum_j w_j f(x_j)^2$.
+where $u_0^{(i)} \in \mathcal{U} = L^2(\Omega)$ is the input function, $\kappa^{(i)} \in \cK$ the physical parameter, $t^{(i)} \in \T$ the observation time, and $s^{(i)}$ the corresponding solution discretized on $N_y$ quadrature points $\{(x_j, w_j)\}_{j=1}^{N_y}$ with norm $\normsq{f} = \sum_j w_j f(x_j)^2$.
 
 
 The dataset $\cD$ captures $\cG$ through a finite collection of snapshots; the underlying operator is defined as follows.
@@ -137,7 +137,7 @@ $\cG(u_0,\kappa) = s(\,\cdot\,,\,\cdot\,;\,u_0,\kappa)$.
 \end{definition}
 
 
-The operator $\cG$ is unknown and expensive to evaluate directly. The \emph{operator learning problem} is to construct $\hat{\cG} \approx \cG$ from $\cD$ alone, generalizing to unseen $(u,\kappa) \notin \cD$ without solving the PDE.
+The operator $\cG$ is unknown and expensive to evaluate directly. The \emph{operator learning problem} is to construct $\hat{\cG} \approx \cG$ from $\cD$ alone, generalizing to unseen $(u_0,\kappa) \notin \cD$ without solving the PDE.
 
 
 
@@ -213,7 +213,7 @@ and serve as supervision for Phase~2.
 
 With bases $\{\Phi_m^*\}$ and responsibilities $\{\gamma_{im}^*\}$
 frozen, we train a \emph{GatingNet} and $M$ \emph{BranchNets} that
-map a new input $(u, \kappa)$ to a weighted combination of local
+map a new input $(u_0, \kappa)$ to a weighted combination of local
 regime predictions. The training objective balances three goals:
 reconstruction accuracy on $\cD$, consistency of the learned gating
 with the offline regime structure $\{\gamma_{im}^*\}$, and diversity
@@ -225,7 +225,7 @@ relative $L^2$ error on held-out test snapshots:
 \begin{equation}
   \varepsilon \;=\; \frac{1}{N_\mathrm{test}}
   \sum_{i=1}^{N_\mathrm{test}}
-  \frac{\norm{s^{(i)} - \hat{s}(\cdot;\,u^{(i)},\kappa^{(i)})}}
+  \frac{\norm{s^{(i)} - \hat{s}(\cdot;\,u_0^{(i)},\kappa^{(i)})}}
        {\norm{s^{(i)}}} .
   \label{eq:metric}
 \end{equation}
@@ -434,23 +434,23 @@ Each regime basis $\Phi_m^{(0)}$ is initialized by
 $\{\gamma_{im}^{(0)}\}$.
 
 \paragraph{E-step.}
-At iteration $t$, the posterior regime responsibility for snapshot $i$
+At iteration $q$, the posterior regime responsibility for snapshot $i$
 follows directly from Bayes' theorem applied to the Gaussian likelihood
 of Definition~\ref{def:generative}:
 \begin{equation}
-  \gamma_{im}^{(t)}
+  \gamma_{im}^{(q)}
   = \frac{
-    \pi_m^{(t-1)}\,
+    \pi_m^{(q-1)}\,
     \exp\!\Bigl(-\dfrac{\|s^{(i)}-\hat{s}_m^{(i)}\|^2}{2\sigma^2}\Bigr)
   }{
     \sum_{j=1}^{M}
-    \pi_j^{(t-1)}\,
+    \pi_j^{(q-1)}\,
     \exp\!\Bigl(-\dfrac{\|s^{(i)}-\hat{s}_j^{(i)}\|^2}{2\sigma^2}\Bigr)
   },
   \label{eq:estep}
 \end{equation}
 where $\hat{s}_m^{(i)}$ is evaluated via~\eqref{eq:neuralpod_regime}
-using $\Phi_m^{(t-1)}$ and $\kappa^{(i)}$.
+using $\Phi_m^{(q-1)}$ and $\kappa^{(i)}$.
 Crucially, as the NeuralPOD bases improve in the M-step, the
 reconstructions $\hat{s}_m^{(i)}$ sharpen, and the E-step
 automatically refines the regime assignments in response.
@@ -462,14 +462,14 @@ Maximizing the expected complete-data log-likelihood with
 responsibilities fixed yields a closed-form update for the mixture
 weights,
 \begin{equation}
-  \pi_m^{(t)} \leftarrow \frac{N_m^{(t)}}{N},
-  \qquad N_m^{(t)} = \sum_{i=1}^{N}\gamma_{im}^{(t)},
+  \pi_m^{(q)} \leftarrow \frac{N_m^{(q)}}{N},
+  \qquad N_m^{(q)} = \sum_{i=1}^{N}\gamma_{im}^{(q)},
   \label{eq:mstep_pi}
 \end{equation}
 and a weighted reconstruction problem for each basis:
 \begin{equation}
   \min_{\Phi_m}
-  \sum_{i=1}^{N} \gamma_{im}^{(t)}\,\|s^{(i)} - \hat{s}_m^{(i)}\|^2,
+  \sum_{i=1}^{N} \gamma_{im}^{(q)}\,\|s^{(i)} - \hat{s}_m^{(i)}\|^2,
   \label{eq:mstep_phi}
 \end{equation}
 solved via \textsc{WeightedNeuralPOD} (Algorithm~\ref{alg:npod}).
@@ -489,34 +489,34 @@ Let $\alpha^{(i)}$ denote the global POD projection of $s^{(i)}$,
 computed once during initialization and fixed thereafter.
 The responsibility-weighted first and second moments of regime $m$ are
 \begin{align}
-  \mu_m^{(t)}
-  &= \frac{1}{N_m^{(t)}}\sum_{i=1}^N
-    \gamma_{im}^{(t)}\,\alpha^{(i)},
+  \mu_m^{(q)}
+  &= \frac{1}{N_m^{(q)}}\sum_{i=1}^N
+    \gamma_{im}^{(q)}\,\alpha^{(i)},
   \label{eq:mu}\\
-  \Sigma_m^{(t)}
-  &= \frac{1}{N_m^{(t)}}\sum_{i=1}^N
-    \gamma_{im}^{(t)}\,
-    (\alpha^{(i)}-\mu_m^{(t)})(\alpha^{(i)}-\mu_m^{(t)})^\top.
+  \Sigma_m^{(q)}
+  &= \frac{1}{N_m^{(q)}}\sum_{i=1}^N
+    \gamma_{im}^{(q)}\,
+    (\alpha^{(i)}-\mu_m^{(q)})(\alpha^{(i)}-\mu_m^{(q)})^\top.
   \label{eq:Sigma}
 \end{align}
 The distribution-shift criterion measures the relative change in these
 moments between consecutive iterations:
 \begin{equation}
-  \Delta_m^{(t)}
-  = \frac{\|\mu_m^{(t)} - \mu_m^{(t-1)}\|_2}
-         {\|\mu_m^{(t-1)}\|_2 + \epsilon}
-  + \frac{\|\Sigma_m^{(t)} - \Sigma_m^{(t-1)}\|_F}
-         {\|\Sigma_m^{(t-1)}\|_F + \epsilon}.
+  \Delta_m^{(q)}
+  = \frac{\|\mu_m^{(q)} - \mu_m^{(q-1)}\|_2}
+         {\|\mu_m^{(q-1)}\|_2 + \epsilon}
+  + \frac{\|\Sigma_m^{(q)} - \Sigma_m^{(q-1)}\|_F}
+         {\|\Sigma_m^{(q-1)}\|_F + \epsilon}.
   \label{eq:Delta}
 \end{equation}
-Note that $\Delta_m^{(t)}$ tracks the shift in the \emph{data content}
+Note that $\Delta_m^{(q)}$ tracks the shift in the \emph{data content}
 of regime $m$ — the snapshots it effectively owns — not merely
 the volume of responsibility reassignments.
 Two snapshots with very different $\alpha^{(i)}$ swapping regime
-membership produce a large $\Delta_m^{(t)}$, triggering a basis
+membership produce a large $\Delta_m^{(q)}$, triggering a basis
 update; two similar snapshots doing the same do not.
 Given thresholds $0 < \varepsilon_s < \varepsilon_l$, the update
-decision at iteration $t$ follows a three-way rule:
+decision at iteration $q$ follows a three-way rule:
 
 \begin{center}
 \renewcommand{\arraystretch}{1.3}\small
@@ -524,13 +524,13 @@ decision at iteration $t$ follows a three-way rule:
 \toprule
 Condition & Action & Rationale \\
 \midrule
-$\Delta_m^{(t)} < \varepsilon_s$
+$\Delta_m^{(q)} < \varepsilon_s$
   & \textsc{Skip}
   & Data manifold unchanged; basis remains accurate \\
-$\varepsilon_s \le \Delta_m^{(t)} < \varepsilon_l$
+$\varepsilon_s \le \Delta_m^{(q)} < \varepsilon_l$
   & \textsc{Incremental}
   & Moderate drift; add or prune one mode \\
-$\Delta_m^{(t)} \ge \varepsilon_l$
+$\Delta_m^{(q)} \ge \varepsilon_l$
   & \textsc{Full rerun}
   & Large shift; rebuild from random initialization \\
 \bottomrule
@@ -539,20 +539,20 @@ $\Delta_m^{(t)} \ge \varepsilon_l$
 
 \noindent
 In the \textsc{Incremental} case, we compute the residual of the
-current basis under the updated responsibilities $\gamma^{(t)}$, add
-a new mode if $\|r_m^{(P_m)}\|_{\gamma_m^{(t)}}^2 \ge \mathrm{Tol}_m$,
+current basis under the updated responsibilities $\gamma^{(q)}$, add
+a new mode if $\|r_m^{(P_m)}\|_{\gamma_m^{(q)}}^2 \ge \mathrm{Tol}_m$,
 and prune the last mode if its weighted contribution falls below
 $\varepsilon_p$.
 The \textsc{Full rerun} case uses a cold-start random initialization.
-When $\Delta_m^{(t)} \ge \varepsilon_l$, the parameters
-$\Phi_m^{(t-1)}$ are a local minimum of the \emph{previous}
+When $\Delta_m^{(q)} \ge \varepsilon_l$, the parameters
+$\Phi_m^{(q-1)}$ are a local minimum of the \emph{previous}
 weighted objective and may be in a basin that is entirely
 misaligned with the new weighted objective; warm-starting would
 trap gradient descent there, encoding the old regime's features
 in the new basis.
 
 \paragraph{Convergence and model selection.}
-EM terminates when $\max_m \Delta_m^{(t)} < \varepsilon_c$.
+EM terminates when $\max_m \Delta_m^{(q)} < \varepsilon_c$.
 The number of regimes $M \in \{2,3,4\}$ is selected by jointly
 minimizing BIC on the GMM fit and mean assignment entropy;
 see Table~\ref{tab:regime_selection}.
@@ -571,18 +571,18 @@ see Table~\ref{tab:regime_selection}.
   for all $i$;\enspace $p \leftarrow 0$
 \While{$\displaystyle\sum_{i=1}^N
   \gamma_{im}\,\|r^{(p),i}\|^2 \;\ge\; \mathrm{Tol}_m$}
-  \State $p \leftarrow p + 1$
   \State Randomly initialize
-    $\phi_p^{(m)}(\cdot\,;\kappa)$ and $\psi_p^{(m)}(\cdot\,;\kappa)$
+    $\phi_{p+1}^{(m)}(\cdot\,;\kappa)$ and $\psi_{p+1}^{(m)}(\cdot\,;\kappa)$
   \State Minimize $\displaystyle\sum_{i=1}^N \gamma_{im}
-    \bigl\|r^{(p-1),i}
-    - \phi_p^{(m)}(\cdot\,;\kappa^{(i)})\,
-      \psi_p^{(m)}(t^{(i)};\kappa^{(i)})\bigr\|^2$
-    over $\phi_p^{(m)}, \psi_p^{(m)}$
-  \State $r^{(p),i} \leftarrow r^{(p-1),i}
-    - \phi_p^{(m)}(\cdot\,;\kappa^{(i)})\,
-      \psi_p^{(m)}(t^{(i)};\kappa^{(i)})$
+    \bigl\|r^{(p),i}
+    - \phi_{p+1}^{(m)}(\cdot\,;\kappa^{(i)})\,
+      \psi_{p+1}^{(m)}(t^{(i)};\kappa^{(i)})\bigr\|^2$
+    over $\phi_{p+1}^{(m)}, \psi_{p+1}^{(m)}$
+  \State $r^{(p+1),i} \leftarrow r^{(p),i}
+    - \phi_{p+1}^{(m)}(\cdot\,;\kappa^{(i)})\,
+      \psi_{p+1}^{(m)}(t^{(i)};\kappa^{(i)})$
     \enspace for all $i$
+  \State $p \leftarrow p + 1$
 \EndWhile
 \State \Return $P_m \!\leftarrow\! p$,\enspace
   $\phi_0^{(m)}$,\enspace
@@ -594,7 +594,7 @@ see Table~\ref{tab:regime_selection}.
 \caption{TEMPO --- Offline Phase}
 \label{alg:tempo}
 \begin{algorithmic}[1]
-\Require $\mathcal{D} = \{s^{(i)}, t^{(i)}, \kappa^{(i)}\}_{i=1}^N$;\;
+\Require $\mathcal{D} = \{u_0^{(i)}, s^{(i)}, t^{(i)}, \kappa^{(i)}\}_{i=1}^N$;\;
   $M,\;\sigma^2,\;\varepsilon_s,\;\varepsilon_l,\;\varepsilon_p,\;
   \varepsilon_c,\;\{\mathrm{Tol}_m\}_{m=1}^M$
 \Ensure Regime bases $\{\Phi_m^*\}$,\;
@@ -617,40 +617,40 @@ see Table~\ref{tab:regime_selection}.
   \Statex \quad\textit{E-step}
   \For{all $i = 1,\ldots,N$ and $m = 1,\ldots,M$}
     \State Compute $\hat{s}_m^{(i)}$ via~\eqref{eq:neuralpod_regime}
-      using $\Phi_m^{(t-1)}$ and $\kappa^{(i)}$
-    \State $\gamma_{im}^{(t)} \leftarrow$ Eq.~\eqref{eq:estep}
+      using $\Phi_m^{(q-1)}$ and $\kappa^{(i)}$
+    \State $\gamma_{im}^{(q)} \leftarrow$ Eq.~\eqref{eq:estep}
   \EndFor
   \Statex \quad\textit{M-step: mixture weights}
-  \State $\pi_m^{(t)} \leftarrow N_m^{(t)}/N$
+  \State $\pi_m^{(q)} \leftarrow N_m^{(q)}/N$
     for all $m$ \hfill\eqref{eq:mstep_pi}
   \Statex \quad\textit{M-step: bases}
   \For{$m = 1,\ldots,M$}
-    \State Compute $\mu_m^{(t)}$~\eqref{eq:mu},\;
-      $\Sigma_m^{(t)}$~\eqref{eq:Sigma},\;
-      $\Delta_m^{(t)}$~\eqref{eq:Delta}
-    \If{$\Delta_m^{(t)} < \varepsilon_s$}
-      \State $\Phi_m^{(t)} \leftarrow \Phi_m^{(t-1)}$
+    \State Compute $\mu_m^{(q)}$~\eqref{eq:mu},\;
+      $\Sigma_m^{(q)}$~\eqref{eq:Sigma},\;
+      $\Delta_m^{(q)}$~\eqref{eq:Delta}
+    \If{$\Delta_m^{(q)} < \varepsilon_s$}
+      \State $\Phi_m^{(q)} \leftarrow \Phi_m^{(q-1)}$
         \hfill \textsc{Skip}
-    \ElsIf{$\Delta_m^{(t)} < \varepsilon_l$}
+    \ElsIf{$\Delta_m^{(q)} < \varepsilon_l$}
       \hfill \textsc{Incremental}
-      \State Compute $r_m^{(P_m)}$ under updated $\gamma^{(t)}$
-      \If{$\|r_m^{(P_m)}\|_{\gamma_m^{(t)}}^2 \ge \mathrm{Tol}_m$}
+      \State Compute $r_m^{(P_m)}$ under updated $\gamma^{(q)}$
+      \If{$\|r_m^{(P_m)}\|_{\gamma_m^{(q)}}^2 \ge \mathrm{Tol}_m$}
         \State Train mode $P_m{+}1$;\; $P_m \leftarrow P_m + 1$
       \EndIf
-      \If{weighted contribution of mode $P_m < \varepsilon_p$}
+      \If{$\sum_{i=1}^N \gamma_{im}^{(q)}\,\|\phi_{P_m}^{(m)}(\cdot;\kappa^{(i)})\,\psi_{P_m}^{(m)}(t^{(i)};\kappa^{(i)})\|^2 < \varepsilon_p$}
         \State $P_m \leftarrow P_m - 1$
       \EndIf
     \Else
       \hfill \textsc{Full rerun}
-      \State $\Phi_m^{(t)} \leftarrow$
+      \State $\Phi_m^{(q)} \leftarrow$
         \Call{WeightedNeuralPOD}
-        {$\{s^{(i)},t^{(i)},\kappa^{(i)},\gamma_{im}^{(t)}\},\,\mathrm{Tol}_m$}
+        {$\{s^{(i)},t^{(i)},\kappa^{(i)},\gamma_{im}^{(q)}\},\,\mathrm{Tol}_m$}
     \EndIf
   \EndFor
-\Until{$\max_m \Delta_m^{(t)} < \varepsilon_c$}
-\State \Return $\Phi_m^* \!\leftarrow\! \Phi_m^{(t)}$,\;
-  $\gamma_{im}^* \!\leftarrow\! \gamma_{im}^{(t)}$,\;
-  $\pi_m^* \!\leftarrow\! \pi_m^{(t)}$
+\Until{$\max_m \Delta_m^{(q)} < \varepsilon_c$}
+\State \Return $\Phi_m^* \!\leftarrow\! \Phi_m^{(q)}$,\;
+  $\gamma_{im}^* \!\leftarrow\! \gamma_{im}^{(q)}$,\;
+  $\pi_m^* \!\leftarrow\! \pi_m^{(q)}$
 \end{algorithmic}
 \end{algorithm}
 
@@ -664,7 +664,7 @@ The online phase trains a \textbf{GatingNet}
 $\mathcal{W}: \mathbb{R}^{m_s + d_\kappa} \to \Delta^{M-1}$
 and $M$ \textbf{BranchNets}
 $\mathcal{B}_m: \mathbb{R}^{m_s + d_\kappa} \to \mathbb{R}^{P_m}$,
-each mapping sensor observations $u_0}$ and parameter
+each mapping sensor observations $u_0$ and parameter
 $\kappa$ to regime weights and expansion coefficients, respectively.
 The TEMPO prediction at query point $x \in \Omega$ is
 \begin{equation}
@@ -777,7 +777,7 @@ We report the mean relative $L^2$ error
 \begin{equation}
   \varepsilon = \frac{1}{N_\mathrm{test}}
   \sum_{i=1}^{N_\mathrm{test}}
-  \frac{\norm{s^{(i)} - \hat{s}(\,\cdot\,;\,u^{(i)},\kappa^{(i)})}}
+  \frac{\norm{s^{(i)} - \hat{s}(\,\cdot\,;\,u_0^{(i)},\kappa^{(i)})}}
        {\norm{s^{(i)}}},
   \label{eq:metric}
 \end{equation}
@@ -857,7 +857,7 @@ demonstrating the parameter-adaptivity of the NeuralPOD basis.
 \label{fig:training_dynamics}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/Neural_POD_rec_basis.png}
 \caption{Learned Fourier NeuralPOD basis functions and
@@ -884,7 +884,7 @@ Method
 \midrule
 DeepONet~\cite{Lu2019}                    & -- & -- & -- \\
 POD-DeepONet~\cite{Lu2022}                & -- & -- & -- \\
-Neural-POD~\cite{Mou2026}                 & -- & -- & -- \\
+NeuralPOD-DeepONet \textit{(ours)}         & -- & -- & -- \\
 TEMPO(POD) \textit{(ours)}                & -- & -- & -- \\
 \textbf{TEMPO(NeuralPOD)} \textit{(ours)} & \textbf{--} & \textbf{--} & \textbf{--} \\
 \bottomrule
@@ -918,6 +918,6 @@ TEMPO(POD) \textit{(ours)}                & -- & -- & -- \\
 
 \subsection{Additional experiments / Proofs of Theorems}\label{app:exp}
 
-TODO
+
 
 \end{document}
