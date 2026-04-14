@@ -25,28 +25,32 @@ class PODDeepONetConfig:
 
 
 class BranchNet(nn.Module):
-    """Maps initial condition u_0 at sensor points to P POD coefficients.
+    """Maps (u0_sensors, kappa) to P mode coefficients.
 
     Args:
         m:          number of sensor points
-        P:          number of POD modes
+        P:          number of modes
         hidden_dim: hidden layer width
         n_layers:   network depth
+        d_kappa:    parameter dimension; 0 means kappa is not used
     """
 
-    def __init__(self, m: int, P: int, hidden_dim: int = 128, n_layers: int = 4) -> None:
+    def __init__(self, m: int, P: int, hidden_dim: int = 128, n_layers: int = 4,
+                 d_kappa: int = 0) -> None:
         super().__init__()
-        self.net = _mlp(m, P, hidden_dim, n_layers, act=nn.Tanh)
+        self.d_kappa = d_kappa
+        self.net = _mlp(m + d_kappa, P, hidden_dim, n_layers, act=nn.Tanh)
 
-    def forward(self, u0: Tensor) -> Tensor:
+    def forward(self, u0: Tensor, kappa: Tensor = None) -> Tensor:
         """
         Args:
-            u0: (N, m) — initial condition at sensor points
-
+            u0:    (N, m)
+            kappa: (N, d_kappa) or None
         Returns:
-            (N, P) — POD coefficients for the full spatiotemporal field
+            (N, P)
         """
-        return self.net(u0)
+        inp = torch.cat([u0, kappa], dim=-1) if self.d_kappa > 0 else u0
+        return self.net(inp)
 
 
 class PODDeepONet(nn.Module):
@@ -62,9 +66,9 @@ class PODDeepONet(nn.Module):
 
     def __init__(self, basis: PODBasis, branch: BranchNet) -> None:
         super().__init__()
-        self.basis  = basis
+        self.basis = basis
         self.branch = branch
-        # POD basis is fixed — freeze all buffers
+        # freeze POD basis
         for p in basis.parameters():
             p.requires_grad_(False)
 
@@ -72,16 +76,16 @@ class PODDeepONet(nn.Module):
     def P(self) -> int:
         return self.basis.num_modes
 
-    def forward(self, u0: Tensor) -> Tensor:
+    def forward(self, u0: Tensor, kappa: Tensor = None) -> Tensor:
         """
         Args:
-            u0: (N, m) — initial conditions at sensor points
-
+            u0:    (N, m) — initial conditions at sensor points
+            kappa: (N, d_kappa) or None
         Returns:
             (N, Nt*Nx) — predicted spatiotemporal field; reshape to (N, Nt, Nx)
         """
-        beta = self.branch(u0)                              # (N, P)
-        return self.basis.mean + beta @ self.basis.modes.T  # (N, Nt*Nx)
+        beta = self.branch(u0, kappa)                      # (N, P)
+        return self.basis.mean + beta @ self.basis.modes.T # (N, Nt*Nx)
 
 
 class PODDeepONetTrainer:
@@ -113,14 +117,14 @@ class PODDeepONetTrainer:
         stride = self.cfg.sensor_stride
 
         u0_sensors = u0[:, ::stride].to(device)  # (N, m)
-        targets    = basis.coeffs.to(device)      # (N, P)
+        targets = basis.coeffs.to(device)         # (N, P)
 
         N, m = u0_sensors.shape
         P    = targets.shape[1]
         print(f"PODDeepONet Phase 2 | N={N}, m={m}, P={P}")
 
-        dl  = DataLoader(TensorDataset(u0_sensors, targets),
-                         batch_size=self.cfg.batch_size, shuffle=True)
+        dl = DataLoader(TensorDataset(u0_sensors, targets),
+                        batch_size=self.cfg.batch_size, shuffle=True)
         opt = torch.optim.AdamW(self.model.branch.parameters(),
                                 lr=self.cfg.lr, weight_decay=1e-4)
 

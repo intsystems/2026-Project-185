@@ -79,9 +79,9 @@ class TEMPOTrainer:
         total = 0.0
         with torch.no_grad():
             for m, trainer in enumerate(self.trainers):
-                s_hat  = trainer.basis(x)
-                res_sq = ((s - s_hat) ** 2 *self._w[None, :]).sum(dim=1)  # (N,)
-                total += (self.gamma[:, m] * res_sq).sum().item()
+                s_hat  = trainer.basis(x).to(s.device)
+                res_sq = ((s - s_hat) ** 2 * self._w.to(s.device)[None, :]).sum(dim=1)  # (N,)
+                total += (self.gamma[:, m].to(s.device) * res_sq).sum().item()
         self.cfg.sigma2 = 0.5 * total / s.shape[0]
         print(f"  calibrated sigma2 = {self.cfg.sigma2:.4e}")
 
@@ -167,8 +167,8 @@ class TEMPOTrainer:
         log_p = torch.empty(s.shape[0], self.cfg.M, device=s.device, dtype=s.dtype)
         with torch.no_grad():
             for m, trainer in enumerate(self.trainers):
-                s_hat  = trainer.basis(x)                                      # (N, Ny)
-                res_sq = ((s - s_hat) ** 2 * self._w[None, :]).sum(dim=1)     # (N,)
+                s_hat  = trainer.basis(x).to(s.device)                        # (N, Ny) — match s device
+                res_sq = ((s - s_hat) ** 2 * self._w.to(s.device)[None, :]).sum(dim=1)   # (N,)
                 log_p[:, m] = self.pi[m].clamp(min=1e-30).log() - res_sq / (2.0 * self.cfg.sigma2)
         log_max = log_p.max(dim=1, keepdim=True).values
         p = (log_p - log_max).exp()
@@ -234,25 +234,27 @@ class TEMPOTrainer:
         Existing modes are kept. New mode added if residual norm exceeds tol.
         Last mode pruned if its weighted contribution is negligible.
         """
-        gamma_m = gamma_m / gamma_m.sum()
+        gamma_m    = gamma_m / gamma_m.sum()
+        gamma_cpu  = gamma_m.cpu()
         w = self._w
 
         # Recompute tolerance with updated gamma
-        s_mean     = (gamma_m[:, None] * s).sum(dim=0)
-        s_centered = s - s_mean[None, :]
-        tol_abs    = trainer.cfg.tol * _weighted_norm_sq(s_centered, gamma_m, w)
+        s_mean     = (gamma_cpu[:, None] * s.cpu()).sum(dim=0)
+        s_centered = s.cpu() - s_mean[None, :]
+        w_cpu      = w.cpu()
+        tol_abs    = trainer.cfg.tol * _weighted_norm_sq(s_centered, gamma_cpu, w_cpu)
 
-        # Residual after all existing modes (snapshot space)
+        # Residual after all existing modes (snapshot space); r lives on CPU
         with torch.no_grad():
             r = trainer._full_residual(s, x)
             for mode in trainer.basis.modes:
                 r = trainer._update_residual(r, mode, x)
 
         # Mode addition
-        res_norm = _weighted_norm_sq(r, gamma_m, w)
+        res_norm = _weighted_norm_sq(r, gamma_cpu, w_cpu)
         if res_norm >= tol_abs and len(trainer.basis.modes) < trainer.cfg.max_modes:
             mode = trainer.basis.add_mode()
-            trainer._train_mode(mode, r, x, gamma_m, w)
+            trainer._train_mode(mode, r, x, gamma_m.to(trainer._device), gamma_cpu, w.to(trainer._device))
             trainer.num_modes += 1
             print(f"    added mode {trainer.num_modes} (res={res_norm:.3e})")
 
