@@ -815,8 +815,6 @@ linear single-regime basis can achieve.
 \end{figure}
 
 \paragraph{NeuralPOD.}
-Figure~\ref{fig:training_dynamics} shows the weighted residual norm as a function
-of greedily added modes.
 The steep initial decay confirms that the Fourier NeuralPOD basis concentrates
 variance efficiently; subsequent modes capture incrementally finer solution
 structure until the residual falls below the stopping tolerance $\mathrm{Tol}$.
@@ -825,13 +823,6 @@ representative reconstructions.
 Figure~\ref{fig:npod_phase1} shows the weighted residual norm as a function of
 greedy mode count.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/output_FNO.png}
-\caption{Fourier NeuralPOD training dynamics on 1D Burgers' ($\nu{=}1.0$):
-  residual MSE per greedily added mode.}
-\label{fig:training_dynamics}
-\end{figure}
 
 \begin{figure}[h]
 \centering
@@ -856,7 +847,9 @@ With bases frozen, branch networks are trained by
 minimising~\eqref{eq:pod_branch_loss}.
 Figures~\ref{fig:pod_phase2_loss} and~\ref{fig:npod_phase2_loss} show the
 MSE training curves for POD-DeepONet and NeuralPOD-DeepONet, respectively.
-Table~\ref{tab:results} (rows 2--3) reports test-set accuracy.
+Table~\ref{tab:results} (rows 2--3) reports test-set accuracy;
+Figures~\ref{fig:pod_err_dist} and~\ref{fig:npod_err_dist} show the full
+test-set error distributions.
 Figures~\ref{fig:pod_reconstruction} and~\ref{fig:npod_reconstruction} show
 representative space--time predictions alongside point-wise absolute errors
 for three randomly selected test snapshots.
@@ -875,6 +868,23 @@ for three randomly selected test snapshots.
 \caption{Phase~2 MSE training curve for NeuralPOD-DeepONet on 1D Burgers'
   ($\nu{=}1.0$).}
 \label{fig:npod_phase2_loss}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_err_dist.png}
+\caption{POD-DeepONet test-set error distribution on 1D Burgers' ($\nu{=}1.0$).
+  \textit{Left:} histogram with mean (red) and median (blue).
+  \textit{Right:} sorted relative $L^2$ errors.}
+\label{fig:pod_err_dist}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_err_dist.png}
+\caption{NeuralPOD-DeepONet test-set error distribution on 1D Burgers' ($\nu{=}1.0$).
+  Layout as in Figure~\ref{fig:pod_err_dist}.}
+\label{fig:npod_err_dist}
 \end{figure}
 
 \begin{figure}[h]
@@ -993,18 +1003,24 @@ Figure~\ref{fig:reconstruct} shows a representative space--time prediction.
 
 \begin{table}[h]
 \centering
-\caption{Mean relative $L^2$ error, RMSE, and MSE on the 1D Burgers' test set,
-  averaged over $\nu\in\{0.001,\,0.01,\,0.1,\,1.0\}$.}
+\caption{Relative $L^2$ error on the 1D Burgers' test set per viscosity value.
+  Best result per column in \textbf{bold}.}
 \label{tab:results}
-\begin{tabular}{lccc}
+\begin{tabular}{lcccccc}
 \toprule
-Method & Rel.\ $L^2$ & RMSE & MSE \\
+Method
+  & $\nu{=}0.001$ & $\nu{=}0.01$ & $\nu{=}0.1$ & $\nu{=}1.0$ & Mean \\
 \midrule
-DeepONet~\cite{Lu2019}                         & -- & -- & -- \\
-POD-DeepONet~\cite{Lu2022}                     & -- & -- & -- \\
-NeuralPOD-DeepONet~\textit{(ours)}             & -- & -- & -- \\
-TEMPO(POD)~\textit{(ours)}                     & -- & -- & -- \\
-\textbf{TEMPO(NeuralPOD)}~\textit{(ours)}      & -- & -- & -- \\
+DeepONet~\cite{Lu2019}
+  & -- & -- & -- & -- & -- \\
+POD-DeepONet~\cite{Lu2022}
+  & -- & 0.2130 & -- & -- & -- \\
+NeuralPOD-DeepONet~\textit{(ours)}
+  & -- & -- & -- & 0.2444 & -- \\
+\textbf{TEMPO(POD)}~\textit{(ours)}
+  & -- & -- & -- & -- & -- \\
+\textbf{TEMPO(NeuralPOD)}~\textit{(ours)}
+  & -- & -- & -- & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
