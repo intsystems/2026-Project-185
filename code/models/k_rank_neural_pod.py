@@ -112,7 +112,6 @@ class WeightedNeuralPODTrainer:
         print(f"  L_data = {loss_data_init:.4e}, w_data = {self._w_data:.4e}")
         print(f"  L_basis = {loss_basis_init:.4e}, w_basis = {self._w_basis:.4e}\n")
 
-        # Training loop
         self.basis.train()
 
         for epoch in pbar:

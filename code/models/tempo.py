@@ -69,20 +69,29 @@ class TEMPOTrainer:
     def _initialize(self, s: Tensor, x: Tensor, t: Tensor, kappa: Tensor) -> None:
         Ny = s.shape[1]
         self._w = torch.ones(Ny, device=s.device, dtype=s.dtype) / Ny
+        print("=== Phase 1: global POD ===")
         self.alpha = self._global_pod(s, x, t)
+        print("=== Phase 2: GMM init ===")
         self.gamma, self.pi, self.mu, self.Sigma = self._init_gmm(self.alpha, s.device)
+        print(f"  pi={[f'{p:.3f}' for p in self.pi.tolist()]}")
+        print("=== Phase 3: regime bases init ===")
         self.trainers = self._init_bases(s, x, t, kappa)
+        print("=== Phase 4: calibrate sigma2 ===")
         self._calibrate_sigma2(s, x)
 
     def _calibrate_sigma2(self, s: Tensor, x: Tensor) -> None:
-        """Set sigma2 """
-        total = 0.0
+        """Set sigma2, batched over N to avoid OOM."""
+        N, total = s.shape[0], 0.0
+        w = self._w.to(s.device)
         with torch.no_grad():
             for m, trainer in enumerate(self.trainers):
-                s_hat  = trainer.basis(x).to(s.device)
-                res_sq = ((s - s_hat) ** 2 * self._w.to(s.device)[None, :]).sum(dim=1)  # (N,)
-                total += (self.gamma[:, m].to(s.device) * res_sq).sum().item()
-        self.cfg.sigma2 = 0.5 * total / s.shape[0]
+                gamma_m = self.gamma[:, m].to(s.device)
+                mean, modes, coeffs = self._basis_components(trainer, x, s.device)
+                for i in range(0, N, 256):
+                    s_hat  = mean + coeffs[i:i+256] @ modes.T
+                    res_sq = ((s[i:i+256] - s_hat) ** 2 * w[None, :]).sum(dim=1)
+                    total += (gamma_m[i:i+256] * res_sq).sum().item()
+        self.cfg.sigma2 = 0.5 * total / N
         print(f"  calibrated sigma2 = {self.cfg.sigma2:.4e}")
 
     def _global_pod(self, s: Tensor, x: Tensor, t: Tensor) -> Tensor:
@@ -113,6 +122,7 @@ class TEMPOTrainer:
         """Train one basis per regime with initial gamma."""
         trainers = []
         for m in range(self.cfg.M):
+            print(f"  regime {m + 1}/{self.cfg.M}")
             trainer = self.cfg.basis_factory(s, x, self.cfg.basis_config)
             trainer.train(s, x, t, kappa, gamma=self.gamma[:, m])
             trainers.append(trainer)
@@ -127,8 +137,7 @@ class TEMPOTrainer:
 
         for em_iter in range(1, self.cfg.max_em_iters + 1):
             print(f"\n{'─' * 65}")
-
-            # E-step: responsibilities from reconstruction error
+            print(f"E-step {em_iter}...")
             gamma_new, ll = self._e_step(s, x)
 
             # M1: mixture weights
@@ -150,26 +159,52 @@ class TEMPOTrainer:
             print(f"EM {em_iter:3d} | LL={ll:.4e} | BIC={bic:.4e} | H={entropy:.3f}")
             print(f"       | delta=[{delta_str}] | pi=[{pi_str}]")
 
-            # M2: adaptive basis update per regime
+            print("M2-step: updating bases...")
             self._m2_step(s, x, t, kappa, gamma_new, delta)
 
             if delta.max().item() < self.cfg.eps_conv:
                 print(f"\n  converged at iteration {em_iter}")
                 break
 
+    def _basis_components(self, trainer, x: Tensor, dev: torch.device):
+        """Extract (mean, modes, coeffs) on dev for batched evaluation.
+
+        Returns:
+            mean:   (Ny,)   weighted mean
+            modes:  (Ny, P) POD modes or stacked Fourier phis
+            coeffs: (N, P)  POD coeffs or stacked lambda_ten
+        """
+        if isinstance(trainer, PODTrainer):
+            return (
+                trainer.basis.mean.to(dev),
+                trainer.basis.modes.to(dev),
+                trainer.basis.coeffs.to(dev),
+            )
+        # FourierNeuralPODTrainer
+        x_dev  = x.to(dev)
+        mean   = trainer.basis.mean_net(x_dev)
+        modes  = torch.stack([md.phi(x_dev) for md in trainer.basis.modes], dim=1)
+        coeffs = torch.stack([md.lambda_ten for md in trainer.basis.modes], dim=1).to(dev)
+        return mean, modes, coeffs
+
     def _e_step(self, s: Tensor, x: Tensor) -> tuple[Tensor, float]:
-        """Posterior responsibilities gamma (N, M) and log-likelihood.
+        """Posterior responsibilities gamma (N, M) and log-likelihood, batched over N.
 
         Returns:
             gamma: (N, M) soft assignments
             ll:    scalar log-likelihood sum_i log sum_m pi_m p(s_i | m)
         """
-        log_p = torch.empty(s.shape[0], self.cfg.M, device=s.device, dtype=s.dtype)
+        N = s.shape[0]
+        log_p = torch.empty(N, self.cfg.M, device=s.device, dtype=s.dtype)
+        w = self._w.to(s.device)
         with torch.no_grad():
             for m, trainer in enumerate(self.trainers):
-                s_hat  = trainer.basis(x).to(s.device)                        # (N, Ny) — match s device
-                res_sq = ((s - s_hat) ** 2 * self._w.to(s.device)[None, :]).sum(dim=1)   # (N,)
-                log_p[:, m] = self.pi[m].clamp(min=1e-30).log() - res_sq / (2.0 * self.cfg.sigma2)
+                mean, modes, coeffs = self._basis_components(trainer, x, s.device)
+                log_pi = self.pi[m].clamp(min=1e-30).log()
+                for i in range(0, N, 256):
+                    s_hat  = mean + coeffs[i:i+256] @ modes.T
+                    res_sq = ((s[i:i+256] - s_hat) ** 2 * w[None, :]).sum(dim=1)
+                    log_p[i:i+256, m] = log_pi - res_sq / (2.0 * self.cfg.sigma2)
         log_max = log_p.max(dim=1, keepdim=True).values
         p = (log_p - log_max).exp()
         ll = (log_max.squeeze(1) + p.sum(dim=1).log()).sum().item()
@@ -201,14 +236,16 @@ class TEMPOTrainer:
                  gamma: Tensor, delta: Tensor) -> None:
         """M2: Skip / Incremental / Full rerun per regime based on Delta_m."""
         for m in range(self.cfg.M):
-            dm      = delta[m].item()
+            dm = delta[m].item()
             gamma_m = gamma[:, m]
             if dm < self.cfg.eps_skip:
-                pass                                                    # Skip
+                print(f"  regime {m + 1}: skip (delta={dm:.3e})")
             elif dm < self.cfg.eps_large:
-                self._m2_incremental(m, s, x, t, kappa, gamma_m)       # Incremental
+                print(f"  regime {m + 1}: incremental (delta={dm:.3e})")
+                self._m2_incremental(m, s, x, t, kappa, gamma_m)
             else:
-                self._m2_full_rerun(m, s, x, t, kappa, gamma_m)        # Full rerun
+                print(f"  regime {m + 1}: full rerun (delta={dm:.3e})")
+                self._m2_full_rerun(m, s, x, t, kappa, gamma_m)
 
     def _m2_full_rerun(self, m: int, s: Tensor, x: Tensor, t: Tensor,
                        kappa: Tensor, gamma_m: Tensor) -> None:

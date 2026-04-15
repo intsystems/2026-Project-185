@@ -720,20 +720,23 @@ off these objectives.
 
 
 
-\newpage
+\clearpage
 
 \section{Computational Experiments}
 \label{sec:exp}
 
-We evaluate TEMPO on parametric PDE benchmarks, verifying
-that (i) the offline phase discovers interpretable regime
-structure, (ii) the learned bases faithfully represent
-regime-specific solution features, and (iii) TEMPO achieves
-lower reconstruction error than single-basis baselines.
+We evaluate TEMPO on parametric PDE benchmarks, verifying three claims:
+(i)~the offline EM phase recovers interpretable, physics-consistent regime
+structure from unlabelled snapshots;
+(ii)~locally adapted bases achieve lower reconstruction error than their
+single-regime counterparts at equal mode count;
+(iii)~TEMPO outperforms single-regime baselines in end-to-end operator accuracy.
+
+\subsection{Experimental Setup}
+\label{sec:setup}
 
 \paragraph{Datasets.}
-We use the PDEBench benchmark~\cite{Takamoto2022}
-across three benchmark problems.
+We use the PDEBench benchmark~\cite{Takamoto2022} across three problems.
 
 \textbf{1D Burgers' equation.}
 \begin{equation}
@@ -741,152 +744,267 @@ across three benchmark problems.
   \qquad x\in(-1,1),\quad t\in(0,2],
   \label{eq:burgers}
 \end{equation}
-with periodic boundary conditions and random initial conditions
-sampled from a fixed distribution.
-The viscosity $\nu \in \{0.001,\,0.01,\,0.1,\,1.0\}$ spans
-qualitatively distinct regimes: smooth diffusive profiles at
-$\nu=1.0$ and near-discontinuous shock structures at $\nu=0.001$.
-Each value provides $N=9{,}500$ trajectories on a uniform grid
-of $N_x=1024$ spatial points and $N_t=101$ time steps,
-yielding $38{,}000$ trajectories in total.
+with periodic boundary conditions and random initial conditions drawn from a
+fixed distribution.
+Viscosity $\nu\in\{0.001,\,0.01,\,0.1,\,1.0\}$ spans qualitatively distinct
+solution regimes: smooth diffusive profiles at $\nu{=}1.0$ and
+near-discontinuous shock structures at $\nu{=}0.001$.
+Each value provides $N{=}9{,}500$ trajectories discretised on $N_x{=}1{,}024$
+spatial points and $N_t{=}101$ time steps, yielding $38{,}000$ trajectories in total.
 
-\textbf{2D Darcy Flow.}
+\textbf{2D Darcy flow.}
 \begin{equation}
   -\nabla\cdot\bigl(a(x)\,\nabla u(x)\bigr) = f(x),
   \qquad x\in(0,1)^2,
   \label{eq:darcy}
 \end{equation}
-with zero Dirichlet boundary conditions
+with zero Dirichlet boundary conditions.
+% TODO: complete Darcy dataset description
 
-% TODO: 1D Advection
+% TODO: 1D Advection dataset
 
 \paragraph{Methods.}
-We compare five methods.
-As baselines we use DeepONet~\cite{Lu2019},
-POD-DeepONet~\cite{Lu2022}, and Neural-POD~\cite{Mou2026}.
-TEMPO is evaluated in two variants depending on the basis
-used in the offline phase:
-\textbf{TEMPO(POD)} constructs regime-specific bases via
-weighted SVD, and
-\textbf{TEMPO(NeuralPOD)} replaces them with Fourier
-NeuralPOD bases~\cite{Mou2026}, which capture nonlinear
+We compare five methods, all implemented and trained by us on the same data
+splits.
+DeepONet~\cite{Lu2019} and POD-DeepONet~\cite{Lu2022} serve as single-regime
+linear baselines.
+NeuralPOD-DeepONet (\textit{ours}) extends POD-DeepONet with the Fourier
+NeuralPOD basis of Section~\ref{sec:bases}.
+TEMPO is evaluated in two variants:
+\textbf{TEMPO(POD)} uses responsibility-weighted SVD as the regime basis, and
+\textbf{TEMPO(NeuralPOD)} uses Fourier NeuralPOD bases, capturing nonlinear
 and parameter-dependent solution structure.
 
-\paragraph{Metrics.}
-We report the mean relative $L^2$ error
-\begin{equation}
-  \varepsilon = \frac{1}{N_\mathrm{test}}
-  \sum_{i=1}^{N_\mathrm{test}}
-  \frac{\norm{s^{(i)} - \hat{s}(\,\cdot\,;\,u_0^{(i)},\kappa^{(i)})}}
-       {\norm{s^{(i)}}},
-  \label{eq:metric}
-\end{equation}
-together with RMSE and MSE, computed per viscosity value
-and aggregated over all $\nu$.
+\paragraph{Metric.}
+All methods are evaluated by the mean relative $L^2$ error $\varepsilon$
+defined in~\eqref{eq:metric}, computed per viscosity value and averaged
+over $\nu\in\{0.001,\,0.01,\,0.1,\,1.0\}$.
+We additionally report RMSE and MSE.
 
-\paragraph{Selection of $M$.}
-The number of regimes is chosen from $M\in\{2,3,4\}$ by
-jointly minimising BIC on the EM-GMM fit and mean assignment
-entropy $H = -\frac{1}{N}\sum_{i,m}\gamma_{im}\log\gamma_{im}$;
-lower entropy indicates more confident regime assignments.
-Table~\ref{tab:regime_selection} reports both criteria;
-$M=3$ achieves the best trade-off and is used throughout.
+%==========================================================================
+\subsection{Single-Regime Operators}
+\label{sec:single_exp}
+%==========================================================================
 
-\begin{table}[h]
-\centering
-\caption{Regime selection on 1D Burgers'}
-\label{tab:regime_selection}
-\begin{tabular}{ccc}
-\toprule
-$M$ & BIC & Entropy \\
-\midrule
-2          & -- & -- \\
-\textbf{3} & \textbf{--} & \textbf{--} \\
-4          & -- & -- \\
-\bottomrule
-\end{tabular}
-\end{table}
+We characterise the single-regime baselines on the 1D Burgers' dataset,
+separating basis quality (Phase~1) from operator accuracy (Phase~2).
+This decomposition isolates where reconstruction error originates and
+provides ablation points for the multi-regime analysis in
+Section~\ref{sec:tempo_exp}.
 
-\paragraph{Regime structure.}
-Figures~\ref{fig:tsne} and~\ref{fig:umap_em} visualise the
-latent structure discovered in the offline phase.
-The t-SNE and UMAP projections show that EM-GMM regime
-assignments do not align with individual viscosity values,
-confirming that the discovered regimes reflect solution
-geometry rather than the physical parameter directly.
-The GMM fit in POD coefficient space $(\alpha_1, \alpha_2)$
-demonstrates that regime separation is well-captured in the
-low-dimensional projection used for clustering.
+\subsubsection{Phase~1: Basis Quality}
+\label{sec:phase1_exp}
+
+\paragraph{POD.}
+Figure~\ref{fig:pod_phase1} shows the singular value spectrum and cumulative
+explained variance.
+The solution energy is heavily concentrated: $K{=}30$ modes capture $99.99\%$
+of the total variance, achieving a Phase~1 relative $L^2$ reconstruction
+error of $1.47\%$.
+This optimal linear compression serves as an upper bound for what any
+linear single-regime basis can achieve.
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/NEW-t_sne.png}
-\caption{t-SNE projection of Burgers' snapshots
-  ($N=38{,}000$, $\nu\in\{0.001,0.01,0.1,1.0\}$). EM-GMM regime assignments ($M=3$);}
-\label{fig:tsne}
-
-\vspace{0.4cm}
-
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/NEW_umap.png}
-\caption{TEMPO regime structure ($M=3$).
-  \textit{Left:} UMAP coloured by regime assignment.
-  \textit{Centre:} same projection coloured by~$\nu$;
-  each branch spans multiple viscosity values.
-  \textit{Right:} GMM fit in POD coefficient space
-  $(\alpha_1,\alpha_2)$; stars indicate centroids $\mu_m$.}
-\label{fig:umap_em}
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_phase1.png}
+\caption{POD basis on 1D Burgers' ($\nu{=}1.0$, $K{=}30$ modes).
+  \textit{Left:} singular value spectrum.
+  \textit{Right:} cumulative explained variance; $K{=}30$ modes attain
+  $99.99\%$.}
+\label{fig:pod_phase1}
 \end{figure}
 
-
-\paragraph{Basis quality.}
-Figure~\ref{fig:training_dynamics} shows the training
-dynamics of the Fourier NeuralPOD basis for a single regime.
-The residual MSE per mode and the MSE reduction per mode
-confirm that modes~1--2 capture the dominant share of the
-variance, with diminishing contributions beyond mode~4.
-Figure~\ref{fig:basis_rec} shows the resulting basis
-functions alongside representative snapshot reconstructions:
-for large $\nu$ the modes are smooth and global, while for
-small $\nu$ they are sharply localised near the shock front,
-demonstrating the parameter-adaptivity of the NeuralPOD basis.
+\paragraph{NeuralPOD.}
+Figure~\ref{fig:training_dynamics} shows the weighted residual norm as a function
+of greedily added modes.
+The steep initial decay confirms that the Fourier NeuralPOD basis concentrates
+variance efficiently; subsequent modes capture incrementally finer solution
+structure until the residual falls below the stopping tolerance $\mathrm{Tol}$.
+Figure~\ref{fig:basis_rec} shows the learned spatial modes alongside
+representative reconstructions.
+Figure~\ref{fig:npod_phase1} shows the weighted residual norm as a function of
+greedy mode count.
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/output_FNO.png}
-\caption{Fourier NeuralPOD training dynamics on 1D Burgers'}
+\caption{Fourier NeuralPOD training dynamics on 1D Burgers' ($\nu{=}1.0$):
+  residual MSE per greedily added mode.}
 \label{fig:training_dynamics}
 \end{figure}
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/Neural_POD_rec_basis.png}
-\caption{Learned Fourier NeuralPOD basis functions and
-  representative reconstructions for 1D Burgers'.}
+\caption{Learned Fourier NeuralPOD basis functions and representative
+  reconstructions on 1D Burgers' ($\nu{=}1.0$).}
 \label{fig:basis_rec}
 \end{figure}
 
-\paragraph{Reconstruction accuracy.}
-Table~\ref{tab:results} reports accuracy for all methods,
-averaged over all viscosity values.
-Figure~\ref{fig:reconstruct} shows space--time heatmaps of
-representative predictions and point-wise absolute errors.
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_phase1.png}
+\caption{Fourier NeuralPOD basis on 1D Burgers' ($\nu{=}1.0$):
+  weighted residual norm as a function of greedy mode count.}
+\label{fig:npod_phase1}
+\end{figure}
+
+\subsubsection{Phase~2: Operator Learning}
+\label{sec:phase2_exp}
+
+With bases frozen, branch networks are trained by
+minimising~\eqref{eq:pod_branch_loss}.
+Figures~\ref{fig:pod_phase2_loss} and~\ref{fig:npod_phase2_loss} show the
+MSE training curves for POD-DeepONet and NeuralPOD-DeepONet, respectively.
+Table~\ref{tab:results} (rows 2--3) reports test-set accuracy.
+Figures~\ref{fig:pod_reconstruction} and~\ref{fig:npod_reconstruction} show
+representative space--time predictions alongside point-wise absolute errors
+for three randomly selected test snapshots.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_phase2_loss.png}
+\caption{Phase~2 MSE training curve for POD-DeepONet on 1D Burgers'
+  ($\nu{=}1.0$).}
+\label{fig:pod_phase2_loss}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_phase2_loss.png}
+\caption{Phase~2 MSE training curve for NeuralPOD-DeepONet on 1D Burgers'
+  ($\nu{=}1.0$).}
+\label{fig:npod_phase2_loss}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_reconstruction.png}
+\caption{POD-DeepONet: representative reconstructions on 1D Burgers'
+  ($\nu{=}1.0$). Each row shows one test snapshot: ground truth
+  (\textit{left}), prediction (\textit{centre}), and point-wise absolute
+  error (\textit{right}).}
+\label{fig:pod_reconstruction}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_reconstruction.png}
+\caption{NeuralPOD-DeepONet: representative reconstructions on 1D Burgers'
+  ($\nu{=}1.0$). Layout as in Figure~\ref{fig:pod_reconstruction}.}
+\label{fig:npod_reconstruction}
+\end{figure}
+
+%==========================================================================
+\subsection{TEMPO: Multi-Regime Operator}
+\label{sec:tempo_exp}
+%==========================================================================
+
+A single basis — linear or nonlinear — must allocate its capacity across
+all solution regimes simultaneously.
+On 1D Burgers' with $\nu\in\{0.001,\ldots,1.0\}$, this forces a compromise:
+modes well-adapted to smooth diffusive profiles are poorly suited to
+near-discontinuous shock structures.
+TEMPO avoids this by discovering the latent regime partition offline and
+constructing a dedicated basis for each regime.
+
+\subsubsection{Offline Phase: Regime Discovery}
+\label{sec:offline_exp}
+
+\paragraph{Number of regimes.}
+We select $M$ from $\{2,3,4\}$ by jointly minimising BIC on the EM-GMM fit
+and mean assignment entropy
+$H = -\frac{1}{N}\sum_{i,m}\gamma_{im}\log\gamma_{im}$,
+where lower $H$ indicates more confident regime assignments.
+Table~\ref{tab:regime_selection} reports both criteria;
+$M{=}3$ achieves the best trade-off and is used throughout.
 
 \begin{table}[h]
 \centering
-\caption{Reconstruction accuracy on the 1D Burgers' test set.}
+\caption{Regime selection on 1D Burgers'.}
+\label{tab:regime_selection}
+\begin{tabular}{ccc}
+\toprule
+$M$ & BIC & $H$ \\
+\midrule
+2          & -- & -- \\
+\textbf{3} & $\mathbf{4.60{\times}10^{4}}$ & \textbf{0.908} \\
+4          & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Regime structure.}
+Figure~\ref{fig:tsne} shows a t-SNE projection of all $38{,}000$ Burgers'
+snapshots coloured by EM-GMM assignment.
+Figure~\ref{fig:umap_em} shows the corresponding UMAP embedding and the GMM
+fit in POD coefficient space $(\alpha_1,\alpha_2)$.
+Crucially, the three discovered regimes do \emph{not} coincide with
+individual viscosity values: each manifold branch spans multiple~$\nu$,
+confirming that the EM partition reflects intrinsic solution geometry rather
+than the physical parameter directly.
+
+After 10 EM iterations the mixture weights are
+$\boldsymbol{\pi}{=}(0.429,\,0.336,\,0.235)$, indicating a balanced,
+non-degenerate partition.
+Regimes~1 and~2 have converged ($\Delta_m < 0.013$);
+regime~3 continues to adapt ($\Delta_3{=}0.310$) and EM is ongoing.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/NEW-t_sne.png}
+\caption{t-SNE projection of Burgers' snapshots}
+\label{fig:tsne}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/TEMPO_phase1.png}
+\caption{TEMPO regime structure ($M{=}3$).
+  \textit{Left:} UMAP coloured by regime assignment.
+  \textit{Centre:} same embedding coloured by~$\nu$; each branch spans
+  multiple viscosity values.
+  \textit{Right:} GMM fit in POD coefficient space $(\alpha_1,\alpha_2)$;
+  stars mark centroids~$\mu_m$.}
+\label{fig:umap_em}
+\end{figure}
+
+\paragraph{Basis quality per regime.}
+Figure~\ref{fig:training_dynamics} shows the Fourier NeuralPOD training
+dynamics for a representative regime: the residual MSE decays rapidly,
+with modes~1--2 capturing the dominant variance and diminishing contributions
+beyond mode~4.
+Figure~\ref{fig:basis_rec} shows the learned spatial modes alongside
+representative reconstructions; modes are smooth and globally supported for
+large~$\nu$ and sharply localised near the shock front for small~$\nu$,
+demonstrating the parameter-adaptivity of the regime-specific NeuralPOD basis.
+
+
+
+\clearpage
+\subsubsection{Online Phase: Reconstruction}
+\label{sec:online_exp}
+
+With bases and responsibilities frozen, GatingNet and BranchNets are trained
+by minimising~\eqref{eq:online_loss}.
+Table~\ref{tab:results} reports test-set accuracy for all five methods,
+averaged over $\nu\in\{0.001,\,0.01,\,0.1,\,1.0\}$.
+Figure~\ref{fig:reconstruct} shows a representative space--time prediction.
+
+\begin{table}[h]
+\centering
+\caption{Mean relative $L^2$ error, RMSE, and MSE on the 1D Burgers' test set,
+  averaged over $\nu\in\{0.001,\,0.01,\,0.1,\,1.0\}$.}
 \label{tab:results}
 \begin{tabular}{lccc}
 \toprule
-Method
-  & Rel.\ $L^2$
-  & RMSE
-  & MSE\\
+Method & Rel.\ $L^2$ & RMSE & MSE \\
 \midrule
-DeepONet~\cite{Lu2019}                    & -- & -- & -- \\
-POD-DeepONet~\cite{Lu2022}                & -- & -- & -- \\
-NeuralPOD-DeepONet \textit{(ours)}         & -- & -- & -- \\
-TEMPO(POD) \textit{(ours)}                & -- & -- & -- \\
-\textbf{TEMPO(NeuralPOD)} \textit{(ours)} & \textbf{--} & \textbf{--} & \textbf{--} \\
+DeepONet~\cite{Lu2019}                         & -- & -- & -- \\
+POD-DeepONet~\cite{Lu2022}                     & -- & -- & -- \\
+NeuralPOD-DeepONet~\textit{(ours)}             & -- & -- & -- \\
+TEMPO(POD)~\textit{(ours)}                     & -- & -- & -- \\
+\textbf{TEMPO(NeuralPOD)}~\textit{(ours)}      & -- & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -894,9 +1012,9 @@ TEMPO(POD) \textit{(ours)}                & -- & -- & -- \\
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/reconstruct.png}
-\caption{Space--time reconstruction at $\nu=1.0$:
-  ground truth (left), TEMPO(NeuralPOD) prediction (centre),
-  and point-wise absolute error (right).}
+\caption{Space--time reconstruction on 1D Burgers' ($\nu{=}1.0$):
+  ground truth (\textit{left}), TEMPO(NeuralPOD) prediction (\textit{centre}),
+  and point-wise absolute error (\textit{right}).}
 \label{fig:reconstruct}
 \end{figure}
 

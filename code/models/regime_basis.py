@@ -51,12 +51,15 @@ class FourierRegimeBasis(nn.Module):
     """Sequential Fourier basis with learnable temporal coefficients.
 
     Args:
-        d_x: spatial dimension
-        M: number of snapshots (temporal coefficient size)
-        quad_weights: quadrature weights (Ny,)
-        hidden_dim: network width
-        num_frequencies: Fourier feature count
-        scale: Fourier frequency scale
+        d_x:             spatial dimension
+        M:               number of snapshots (temporal coefficient size)
+        quad_weights:    quadrature weights (Ny,)
+        hidden_dim:      network width
+        num_frequencies: total Fourier feature count
+        scale:           single frequency scale (used when scales is None)
+        scales:          multi-scale list, e.g. [1.0, 3.0, 8.0]; frequencies
+                         are split evenly across scales for richer coverage
+        n_layers:        depth of each phi MLP (default 2 hidden layers)
     """
 
     def __init__(
@@ -67,6 +70,8 @@ class FourierRegimeBasis(nn.Module):
         hidden_dim: int = 128,
         num_frequencies: int = 16,
         scale: float = 10.0,
+        scales: list[float] | None = None,
+        n_layers: int = 2,
     ) -> None:
         super().__init__()
         self.d_x = d_x
@@ -74,8 +79,10 @@ class FourierRegimeBasis(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_frequencies = num_frequencies
         self.scale = scale
+        self.scales = scales
+        self.n_layers = n_layers
 
-        self.mean_net = SpatialFourierNN(d_x, hidden_dim, num_frequencies, scale)
+        self.mean_net = SpatialFourierNN(d_x, hidden_dim, num_frequencies, scale, scales, n_layers)
         self.modes = nn.ModuleList()
         self.register_buffer("quad_weights", quad_weights)
 
@@ -88,9 +95,6 @@ class FourierRegimeBasis(nn.Module):
 
         Args:
             x: (Ny, d_x) spatial grid
-            t: unused
-            kappa: unused
-
         Returns:
             (N, Ny) full reconstruction
         """
@@ -103,7 +107,8 @@ class FourierRegimeBasis(nn.Module):
 
     def add_mode(self) -> FourierPODMode:
         mode = FourierPODMode(
-            self.d_x, self.M, self.hidden_dim, self.num_frequencies, self.scale
+            self.d_x, self.M, self.hidden_dim, self.num_frequencies,
+            self.scale, self.scales, self.n_layers,
         )
         mode = mode.to(self.quad_weights.device)
         self.modes.append(mode)

@@ -14,7 +14,7 @@ from .neural_pod_mode import FourierPODMode
 
 
 def _weighted_norm_sq(r: Tensor, gamma: Tensor, w: Tensor) -> float:
-    """sum_i gamma_i * sum_j w_j * r_ij^2  — always computed on CPU."""
+    """Weighted squared norm: sum_i gamma_i * sum_j w_j * r_ij^2. Always on CPU."""
     r_cpu     = r.cpu().float()
     gamma_cpu = gamma.cpu().float()
     w_cpu     = w.cpu().float()
@@ -130,26 +130,22 @@ class FourierNeuralPODTrainer:
         print(f"  done: {self.num_modes} modes\n")
         return self.history
 
-    # ------------------------------------------------------------------
-    # Residual helpers (spatial functions evaluated on GPU; r lives on CPU)
-    # ------------------------------------------------------------------
+    # Residual helpers: phi(x) evaluated on GPU, r stored on CPU.
 
     @torch.no_grad()
     def _full_residual(self, s: Tensor, x: Tensor) -> Tensor:
-        """(N, Ny) residual on CPU: s - mean_net(x)."""
+        """(N, Ny) on CPU: s - mean_net(x)."""
         mean_cpu = self.basis.mean_net(x).cpu()   # (Ny,)
         return (s.cpu() - mean_cpu[None, :]).detach()
 
     @torch.no_grad()
     def _update_residual(self, r: Tensor, mode: FourierPODMode, x: Tensor) -> Tensor:
-        """(N, Ny) updated residual on CPU: r - phi(x) ⊗ lambda."""
+        """(N, Ny) on CPU: r - outer(lambda, phi(x))."""
         phi_cpu    = mode.phi(x).cpu()            # (Ny,)
         lambda_cpu = mode.lambda_ten.cpu()        # (N,)
         return (r.cpu() - torch.outer(lambda_cpu, phi_cpu)).detach()
 
-    # ------------------------------------------------------------------
-    # Mean training (full-batch on GPU — x, s_mean, w are all Ny-dim, small)
-    # ------------------------------------------------------------------
+    # Mean training: full batch on GPU (x, s_mean, w are all Ny-sized).
 
     def _train_mean(self, s_mean: Tensor, x: Tensor, w: Tensor) -> None:
         """Loss: sum_j w_j (mean_net(x_j) - s_mean_j)^2  (full batch on GPU)."""
@@ -172,20 +168,17 @@ class FourierNeuralPODTrainer:
                 self.history.mean_loss.append(loss.item())
                 pbar.set_postfix(loss=f"{loss.item():.3e}")
 
-    # ------------------------------------------------------------------
-    # Mode training (trajectory batching over N)
-    # ------------------------------------------------------------------
+    # Mode training: batched over N trajectories.
 
     def _train_mode(
         self, mode: FourierPODMode, r: Tensor, x: Tensor,
         gamma_dev: Tensor, gamma_cpu: Tensor, w: Tensor
     ) -> None:
-        """Loss: sum_i gamma_i sum_j w_j (phi(x_j) lambda_i - r_ij)^2
+        """Loss: sum_i gamma_i sum_j w_j (phi(x_j) * lambda_i - r_ij)^2.
 
-        phi(x) is computed once per epoch on GPU (shape Ny,).
-        Trajectory batches r[i:i+B] are moved GPU inside the inner loop.
-        Gradients are accumulated across all trajectory batches before opt.step().
-        lambda_ten lives on GPU (N scalars — always small).
+        phi(x) is evaluated once per epoch on GPU.
+        Trajectory batches r[i:i+B] are moved to GPU inside the loop.
+        Gradients accumulate across batches before each optimizer step.
         """
         B   = self.cfg.traj_batch_size
         N   = r.shape[0]
@@ -210,22 +203,18 @@ class FourierNeuralPODTrainer:
             opt.zero_grad()
             epoch_loss = 0.0
 
-            # phi(x): compute once per epoch on GPU  →  (Ny,)
-            phi = mode.phi(x)   # (Ny,)
+            phi = mode.phi(x)   # (Ny,) evaluated once; reused across all batches
 
             for i in range(0, N, B):
-                # trajectory batch
                 r_b      = r[i : i + B].to(dev)          # (B, Ny)
                 gamma_b  = gamma_dev[i : i + B]           # (B,)
 
-                # pred[j, k] = phi[j] * lambda[k]  →  (Ny, B)
                 lam_b    = mode.lambda_ten[i : i + B]     # (B,)
                 pred     = torch.outer(phi, lam_b)        # (Ny, B)
 
-                # loss contribution from this batch
                 diff     = (pred - r_b.T) ** 2            # (Ny, B)
                 loss_b   = (diff * w[:, None] * gamma_b[None, :]).sum()
-                loss_b.backward(retain_graph=(i + B < N)) # keep graph for phi across batches
+                loss_b.backward(retain_graph=(i + B < N)) # retain graph for phi until last batch
 
                 epoch_loss += loss_b.item()
 
