@@ -99,7 +99,7 @@ class PODDeepONetTrainer:
 
     def __init__(self, model: PODDeepONet, cfg: PODDeepONetConfig) -> None:
         self.model = model
-        self.cfg   = cfg
+        self.cfg = cfg
 
     def train(self, u0: Tensor) -> list[float]:
         """Train the branch net on POD coefficient regression.
@@ -120,7 +120,7 @@ class PODDeepONetTrainer:
         targets = basis.coeffs.to(device)         # (N, P)
 
         N, m = u0_sensors.shape
-        P    = targets.shape[1]
+        P = targets.shape[1]
         print(f"PODDeepONet Phase 2 | N={N}, m={m}, P={P}")
 
         dl = DataLoader(TensorDataset(u0_sensors, targets),
@@ -157,7 +157,7 @@ class PODDeepONetTrainer:
         Returns:
             (N, Nt*Nx) — reshape to (N, Nt, Nx) for visualization
         """
-        device     = next(self.model.parameters()).device
+        device = next(self.model.parameters()).device
         u0_sensors = u0_new[:, ::self.cfg.sensor_stride].to(device)
         self.model.eval()
         return self.model(u0_sensors)

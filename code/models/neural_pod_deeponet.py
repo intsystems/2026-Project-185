@@ -37,7 +37,7 @@ class NeuralPODDeepONet(nn.Module):
 
     def __init__(self, basis: FourierRegimeBasis, branch: BranchNet) -> None:
         super().__init__()
-        self.basis  = basis
+        self.basis = basis
         self.branch = branch
         for p in basis.parameters():
             p.requires_grad_(False)
@@ -55,10 +55,10 @@ class NeuralPODDeepONet(nn.Module):
         Returns:
             (N, Nt*Nx) — predicted spatiotemporal field; reshape to (N, Nt, Nx)
         """
-        beta = self.branch(u0)                                                 # (N, K)
-        phi  = torch.stack([m.phi(x_flat) for m in self.basis.modes], dim=1)  # (Nt*Nx, K)
-        mean = self.basis.mean_net(x_flat)                                     # (Nt*Nx,)
-        return mean.unsqueeze(0) + beta @ phi.T                                # (N, Nt*Nx)
+        beta = self.branch(u0)  # (N, K)
+        phi = torch.stack([m.phi(x_flat) for m in self.basis.modes], dim=1)  # (Nt*Nx, K)
+        mean = self.basis.mean_net(x_flat)  # (Nt*Nx,)
+        return mean.unsqueeze(0) + beta @ phi.T  # (N, Nt*Nx)
 
 
 class NeuralPODDeepONetTrainer:
@@ -75,7 +75,7 @@ class NeuralPODDeepONetTrainer:
 
     def __init__(self, model: NeuralPODDeepONet, cfg: NeuralPODDeepONetConfig) -> None:
         self.model = model
-        self.cfg   = cfg
+        self.cfg = cfg
 
     def train(self, u0: Tensor) -> list[float]:
         """Train branch net on lambda coefficient regression.
@@ -90,20 +90,20 @@ class NeuralPODDeepONetTrainer:
         K = len(basis.modes)
         assert K > 0, "Run FourierNeuralPODTrainer.train(s_traj, x_flat) first."
 
-        # stack lambda_ten from each mode -> (N_traj, K)
+        # stack lambda_ten from each mode into (N_traj, K)
         coeffs = torch.stack([m.lambda_ten.detach() for m in basis.modes], dim=1)
 
         device = next(self.model.parameters()).device
         stride = self.cfg.sensor_stride
 
         u0_sensors = u0[:, ::stride].to(device)
-        targets    = coeffs.to(device)
+        targets = coeffs.to(device)
 
         N, m = u0_sensors.shape
         print(f"NeuralPOD-DeepONet Phase 2 | N={N}, m={m}, K={K}")
 
-        dl  = DataLoader(TensorDataset(u0_sensors, targets),
-                         batch_size=self.cfg.batch_size, shuffle=True)
+        dl = DataLoader(TensorDataset(u0_sensors, targets),
+                        batch_size=self.cfg.batch_size, shuffle=True)
         opt = torch.optim.AdamW(self.model.branch.parameters(),
                                 lr=self.cfg.lr, weight_decay=1e-4)
 
@@ -137,8 +137,8 @@ class NeuralPODDeepONetTrainer:
         Returns:
             (N, Nt*Nx) — reshape to (N, Nt, Nx) for visualization
         """
-        device     = next(self.model.parameters()).device
+        device = next(self.model.parameters()).device
         u0_sensors = u0_new[:, ::self.cfg.sensor_stride].to(device)
-        x_flat     = x_flat.to(device)
+        x_flat = x_flat.to(device)
         self.model.eval()
         return self.model(u0_sensors, x_flat)

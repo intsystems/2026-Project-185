@@ -115,18 +115,24 @@ The behavior of many physical systems is governed by a set of parameters $\kappa
 
 Let $\Omega \subset \R^d$ be a bounded spatial domain and $\T \subset \R_{\geq 0}$ a time interval.
 
-We are given a dataset of $N$ solution snapshots:
+We are given a dataset of $N$ solution trajectories:
 \begin{equation}
-  \cD = \bigl\{\,(u^{(i)}_0,\,\kappa^{(i)},\,t^{(i)},\,s^{(i)})\,\bigr\}_{i=1}^{N},
+  \cD = \bigl\{\,(u^{(i)}_0,\,\kappa^{(i)},\,s^{(i)})\,\bigr\}_{i=1}^{N},
   \qquad
-  s^{(i)}(\cdot) = s\!\left(\cdot,\,t^{(i)};\,u^{(i)}_0,\kappa^{(i)}\right)
-  \in L^2(\Omega),
+  s^{(i)} = s\!\left(\cdot,\,\cdot\,;\,u^{(i)}_0,\kappa^{(i)}\right)
+  \in L^2(\Omega\times\mathcal{T}),
   \label{eq:dataset}
 \end{equation}
-where $u_0^{(i)} \in \mathcal{U} = L^2(\Omega)$ is the input function, $\kappa^{(i)} \in \cK$ the physical parameter, $t^{(i)} \in \T$ the observation time, and $s^{(i)}$ the corresponding solution discretized on $N_y$ quadrature points $\{(x_j, w_j)\}_{j=1}^{N_y}$ with norm $\normsq{f} = \sum_j w_j f(x_j)^2$.
+where $u_0^{(i)} \in \mathcal{U} = L^2(\Omega)$ is the initial condition and $\kappa^{(i)} \in \cK$ the physical parameter.
+Each trajectory $s^{(i)}$ is discretized on $N_y = N_t N_x$ quadrature points
+$\{y_j = (x_j, t_j),\, w_j\}_{j=1}^{N_y}$ covering the product grid
+$\Omega \times \mathcal{T}$, with norm $\normsq{f} = \sum_j w_j f(y_j)^2$.
+We use the term \emph{trajectory} to refer to any solution field indexed by $(u_0,\kappa)$;
+the formulation applies equally to purely spatial problems (where $\mathcal{T}$ collapses to a single point)
+or to any other product structure on the output domain.
 
 
-The dataset $\cD$ captures $\cG$ through a finite collection of snapshots; the underlying operator is defined as follows.
+The dataset $\cD$ captures $\cG$ through a finite collection of trajectories; the underlying operator is defined as follows.
 
 \begin{definition}[Solution operator]
 \label{def:operator}
@@ -145,17 +151,17 @@ The operator $\cG$ is unknown and expensive to evaluate directly. The \emph{oper
 
 \subsection*{The multi-regime assumption}
 
-When solutions change character fundamentally across $\cK$, the optimal low-dimensional representation differs from regime to regime, and no single global basis captures the full solution diversity. We formalize this observation via a latent variable model over the snapshot ensemble.
+When solutions change character fundamentally across $\cK$, the optimal low-dimensional representation differs from regime to regime, and no single global basis captures the full solution diversity. We formalize this observation via a latent variable model over the trajectory ensemble.
 
 \begin{definition}[Generative model]
 \label{def:generative}
-Each snapshot arises from one of $M$ latent regimes. The regime label $z_i \in \{1,\ldots,M\}$ is unobserved and drawn from a categorical prior,
+Each trajectory arises from one of $M$ latent regimes. The regime label $z_i \in \{1,\ldots,M\}$ is unobserved and drawn from a categorical prior,
 \begin{equation}
   z_i \sim \mathrm{Categorical}(\pi_1,\ldots,\pi_M),
   \qquad \pi_m \geq 0,\quad \textstyle\sum_m \pi_m = 1.
   \label{eq:prior}
 \end{equation}
-Conditioned on $z_i = m$, the snapshot is distributed as
+Conditioned on $z_i = m$, the trajectory is distributed as
 \begin{equation}
  ( s^{(i)} \mid z_i{=}m) \;\sim\;
   \cN\!\bigl(\hats_m^{(i)},\;\sigma^2 W^{-1}\bigr),
@@ -165,24 +171,30 @@ where $W = \mathrm{diag}(w_1,\ldots,w_{N_y})$ is the quadrature weight matrix, $
 \end{definition}
 
 
-The generative model leaves $\hats_m^{(i)}$ unspecified. We require only that it admits a \emph{separable low-rank form}:
+The generative model leaves $\hats_m^{(i)}$ unspecified. We require only that it admits a \emph{low-rank trajectory decomposition}:
 \begin{equation}
-  \hats_m^{(i)}(x)
-  \;=\; \phi_0^{(m)}\!\left(x;\kappa^{(i)}\right)
+  \hats_m^{(i)}(y)
+  \;=\; \phi_0^{(m)}(y)
   + \sum_{p=1}^{P_m}
-    \phi_p^{(m)}\!\left(x;\kappa^{(i)}\right)\,
-    \psi_p^{(m)}\!\left(t^{(i)};\kappa^{(i)}\right),
+    \lambda_p^{(m,i)}\,\phi_p^{(m)}(y),
+  \qquad y = (x,t) \in \Omega\times\mathcal{T},
   \label{eq:separable}
 \end{equation}
-where $\phi_p^{(m)}(\cdot;\kappa)$ are spatial basis functions and $\psi_p^{(m)}(\cdot;\kappa)$ temporal coefficients, both conditioned on $\kappa$. This form encompasses POD~\citep{Lu2022}, kernel PCA~\citep{Eivazi2024}, and learned neural bases~\citep{Mou2026}; in this work we adopt the latter.
+where $\phi_p^{(m)} : \Omega\times\mathcal{T}\to\mathbb{R}$ are spatiotemporal
+mode functions and $\lambda_p^{(m,i)} \in \mathbb{R}$ a scalar amplitude
+for trajectory~$i$ on mode~$p$.
+This form encompasses POD~\citep{Lu2022} and learned neural bases~\citep{Mou2026};
+in this work we adopt the latter.
 
 \begin{definition}[Regime approximator]
 \label{def:approx}
 The parameters of regime $m$ are
-$\Phi_m = \{\phi_p^{(m)}, \psi_p^{(m)}\}_{p=0}^{P_m}$,
-where $\phi_0^{(m)}(\cdot;\kappa)$ is a parameter-dependent mean,
-$\{\phi_p^{(m)}\}_{p \geq 1}$ spatial basis networks,
-$\{\psi_p^{(m)}\}_{p \geq 1}$ temporal coefficient networks,
+$\Phi_m = \{\phi_p^{(m)}\}_{p=0}^{P_m}$
+and scalar amplitudes
+$\Lambda_m = \{\lambda_p^{(m,i)}\}_{p=1,\,i=1}^{P_m,\,N}$,
+where $\phi_0^{(m)} : \Omega\times\mathcal{T}\to\mathbb{R}$ is the regime mean field,
+$\{\phi_p^{(m)}\}_{p \geq 1}$ spatiotemporal mode functions,
+$\lambda_p^{(m,i)}\in\mathbb{R}$ the scalar amplitude of trajectory~$i$ on mode~$p$,
 and $P_m \leq P_{\max}$ the adaptive mode count.
 \end{definition}
 
@@ -399,31 +411,29 @@ For problems such as Burgers' equation, where small viscosity produces
 sharp shock structures and large viscosity yields smooth diffusion, the
 optimal basis geometry differs fundamentally between regimes.
 TEMPO avoids this compromise by constructing a dedicated basis for each
-of $M$ latent regimes, discovered from unlabelled snapshots via
+of $M$ latent regimes, discovered from unlabelled trajectories via
 Expectation--Maximization on the generative model of
 Definition~\ref{def:generative}.
 
-Under regime $m$, the NeuralPOD approximation takes a
-\emph{parameter-conditioned separable form}:
+Under regime $m$, the approximation follows~\eqref{eq:separable}:
 \begin{equation}
-  \hat{s}_m^{(i)}(x)
-  = \phi_0^{(m)}\!\left(x;\kappa^{(i)}\right)
+  \hat{s}_m^{(i)}(y)
+  = \phi_0^{(m)}(y)
   + \sum_{p=1}^{P_m}
-    \phi_p^{(m)}\!\left(x;\kappa^{(i)}\right)
-    \psi_p^{(m)}\!\left(t^{(i)};\kappa^{(i)}\right),
+    \lambda_p^{(m,i)}\,\phi_p^{(m)}(y),
+  \qquad y\in\Omega\times\mathcal{T}.
   \label{eq:neuralpod_regime}
 \end{equation}
-where $\phi_p^{(m)}(\cdot;\kappa)$ and $\psi_p^{(m)}(\cdot;\kappa)$ are
-separate spatial and temporal networks conditioned on $\kappa$.
-This differs from the single-regime basis of Section~\ref{sec:neuralpod_basis}
-in two respects: the basis is \emph{split across space and time}
-(enabling the branch network to supply only scalar coefficients per mode),
-and it is \emph{conditioned on $\kappa$}, so that the same networks
-generalize continuously across the full parameter space $\mathcal{K}$
-without retraining.
+Each trajectory $s^{(i)}\in\mathbb{R}^{N_y}$ is treated as a single data point on
+the product grid $\{y_j=(x_j,t_j)\}$, so the temporal structure is encoded in the
+coordinate $y$ rather than separated as a per-snapshot argument.
+The scalar amplitudes $\{\lambda_p^{(m,i)}\}$ are learned jointly with the mode
+functions $\{\phi_p^{(m)}\}$ during offline training and serve as regression targets
+for the online BranchNet $\mathcal{B}_m(u_0,\kappa)\to\mathbb{R}^{P_m}$,
+which predicts these amplitudes for unseen inputs at inference time.
 
 \paragraph{Initialization.}
-A global POD is computed on all $N$ snapshots; each snapshot is
+A global POD is computed on all $N$ trajectories; each trajectory is
 projected to a $P$-dimensional coefficient vector
 $\alpha^{(i)} \in \mathbb{R}^P$.
 Running a standard GMM on $\{\alpha^{(i)}\}$ yields initial
@@ -434,7 +444,7 @@ Each regime basis $\Phi_m^{(0)}$ is initialized by
 $\{\gamma_{im}^{(0)}\}$.
 
 \paragraph{E-step.}
-At iteration $q$, the posterior regime responsibility for snapshot $i$
+At iteration $q$, the posterior regime responsibility for trajectory $i$
 follows directly from Bayes' theorem applied to the Gaussian likelihood
 of Definition~\ref{def:generative}:
 \begin{equation}
@@ -450,7 +460,7 @@ of Definition~\ref{def:generative}:
   \label{eq:estep}
 \end{equation}
 where $\hat{s}_m^{(i)}$ is evaluated via~\eqref{eq:neuralpod_regime}
-using $\Phi_m^{(q-1)}$ and $\kappa^{(i)}$.
+using $\Phi_m^{(q-1)}$ and $\Lambda_m^{(q-1)}$.
 Crucially, as the NeuralPOD bases improve in the M-step, the
 reconstructions $\hat{s}_m^{(i)}$ sharpen, and the E-step
 automatically refines the regime assignments in response.
@@ -468,7 +478,7 @@ weights,
 \end{equation}
 and a weighted reconstruction problem for each basis:
 \begin{equation}
-  \min_{\Phi_m}
+  \min_{\Phi_m,\,\Lambda_m}
   \sum_{i=1}^{N} \gamma_{im}^{(q)}\,\|s^{(i)} - \hat{s}_m^{(i)}\|^2,
   \label{eq:mstep_phi}
 \end{equation}
@@ -510,9 +520,9 @@ moments between consecutive iterations:
   \label{eq:Delta}
 \end{equation}
 Note that $\Delta_m^{(q)}$ tracks the shift in the \emph{data content}
-of regime $m$ — the snapshots it effectively owns — not merely
+of regime $m$ — the trajectories it effectively owns — not merely
 the volume of responsibility reassignments.
-Two snapshots with very different $\alpha^{(i)}$ swapping regime
+Two trajectories with very different $\alpha^{(i)}$ swapping regime
 membership produce a large $\Delta_m^{(q)}$, triggering a basis
 update; two similar snapshots doing the same do not.
 Given thresholds $0 < \varepsilon_s < \varepsilon_l$, the update
@@ -559,34 +569,33 @@ see Table~\ref{tab:regime_selection}.
 
 \begin{algorithm}[t]
 \caption{\textsc{WeightedNeuralPOD}$\bigl(
-  \{s^{(i)}, t^{(i)}, \kappa^{(i)}, \gamma_{im}\}_{i=1}^N,\;
+  \{s^{(i)}, \gamma_{im}\}_{i=1}^N,\;
   \mathrm{Tol}_m\bigr)$}
 \label{alg:npod}
 \begin{algorithmic}[1]
-\State Train $\phi_0^{(m)}(\cdot\,;\kappa)$ by minimizing
-  $\sum_i \gamma_{im}\,
-  \|s^{(i)} - \phi_0^{(m)}(\cdot\,;\kappa^{(i)})\|^2$
-\State $r^{(0),i} \leftarrow
-  s^{(i)} - \phi_0^{(m)}(\cdot\,;\kappa^{(i)})$
-  for all $i$;\enspace $p \leftarrow 0$
-\While{$\displaystyle\sum_{i=1}^N
-  \gamma_{im}\,\|r^{(p),i}\|^2 \;\ge\; \mathrm{Tol}_m$}
-  \State Randomly initialize
-    $\phi_{p+1}^{(m)}(\cdot\,;\kappa)$ and $\psi_{p+1}^{(m)}(\cdot\,;\kappa)$
-  \State Minimize $\displaystyle\sum_{i=1}^N \gamma_{im}
-    \bigl\|r^{(p),i}
-    - \phi_{p+1}^{(m)}(\cdot\,;\kappa^{(i)})\,
-      \psi_{p+1}^{(m)}(t^{(i)};\kappa^{(i)})\bigr\|^2$
-    over $\phi_{p+1}^{(m)}, \psi_{p+1}^{(m)}$
-  \State $r^{(p+1),i} \leftarrow r^{(p),i}
-    - \phi_{p+1}^{(m)}(\cdot\,;\kappa^{(i)})\,
-      \psi_{p+1}^{(m)}(t^{(i)};\kappa^{(i)})$
+\State $\bar{s}^{(m)} \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,s^{(i)}$
+  \hfill\Comment{responsibility-weighted mean trajectory}
+\State Train $\phi_0^{(m)}$ by minimizing
+  $\displaystyle\sum_j w_j\bigl(\phi_0^{(m)}(y_j) - \bar{s}^{(m)}_j\bigr)^2$
+\State $r^{(0,i)} \leftarrow s^{(i)} - \phi_0^{(m)}(y)$
+  \enspace for all $i$;\enspace $p \leftarrow 0$
+\While{$\displaystyle\sum_{i=1}^N \gamma_{im}\,\|r^{(p,i)}\|_w^2
+  \;\ge\; \mathrm{Tol}_m$ \textbf{ and } $p < P_{\max}$}
+  \State Jointly minimize over $\phi_{p+1}^{(m)}$ and
+    $\{\lambda_{p+1}^{(m,i)}\}_{i=1}^N$:
+    \[
+      \sum_{i=1}^N \gamma_{im}
+      \sum_j w_j\!\left(\lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y_j)
+      - r^{(p,i)}_j\right)^{\!2}
+    \]
+  \State $r^{(p+1,i)} \leftarrow r^{(p,i)}
+    - \lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y)$
     \enspace for all $i$
   \State $p \leftarrow p + 1$
 \EndWhile
 \State \Return $P_m \!\leftarrow\! p$,\enspace
   $\phi_0^{(m)}$,\enspace
-  $\bigl\{\phi_p^{(m)},\psi_p^{(m)}\bigr\}_{p=1}^{P_m}$
+  $\bigl\{\phi_p^{(m)},\,\{\lambda_p^{(m,i)}\}_{i=1}^N\bigr\}_{p=1}^{P_m}$
 \end{algorithmic}
 \end{algorithm}
 
@@ -594,10 +603,11 @@ see Table~\ref{tab:regime_selection}.
 \caption{TEMPO --- Offline Phase}
 \label{alg:tempo}
 \begin{algorithmic}[1]
-\Require $\mathcal{D} = \{u_0^{(i)}, s^{(i)}, t^{(i)}, \kappa^{(i)}\}_{i=1}^N$;\;
+\Require $\mathcal{D} = \{u_0^{(i)}, \kappa^{(i)}, s^{(i)}\}_{i=1}^N$;\;
   $M,\;\sigma^2,\;\varepsilon_s,\;\varepsilon_l,\;\varepsilon_p,\;
   \varepsilon_c,\;\{\mathrm{Tol}_m\}_{m=1}^M$
 \Ensure Regime bases $\{\Phi_m^*\}$,\;
+  amplitudes $\{\Lambda_m^*\}$,\;
   responsibilities $\{\gamma_{im}^*\}$,\;
   weights $\{\pi_m^*\}$
 %
@@ -607,9 +617,9 @@ see Table~\ref{tab:regime_selection}.
 \State Run GMM-EM on $\{\alpha^{(i)}\}$ $\to$
   $\gamma_{im}^{(0)},\;\pi_m^{(0)},\;\mu_m^{(0)},\;\Sigma_m^{(0)}$
 \For{$m = 1,\ldots,M$}
-  \State $\Phi_m^{(0)} \leftarrow$
+  \State $\Phi_m^{(0)},\,\Lambda_m^{(0)} \leftarrow$
     \Call{WeightedNeuralPOD}
-    {$\{s^{(i)},t^{(i)},\kappa^{(i)},\gamma_{im}^{(0)}\},\,\mathrm{Tol}_m$}
+    {$\{s^{(i)},\gamma_{im}^{(0)}\},\,\mathrm{Tol}_m$}
 \EndFor
 %
 \Statex \textit{EM iterations}
@@ -617,7 +627,7 @@ see Table~\ref{tab:regime_selection}.
   \Statex \quad\textit{E-step}
   \For{all $i = 1,\ldots,N$ and $m = 1,\ldots,M$}
     \State Compute $\hat{s}_m^{(i)}$ via~\eqref{eq:neuralpod_regime}
-      using $\Phi_m^{(q-1)}$ and $\kappa^{(i)}$
+      using $\Phi_m^{(q-1)}$ and $\Lambda_m^{(q-1)}$
     \State $\gamma_{im}^{(q)} \leftarrow$ Eq.~\eqref{eq:estep}
   \EndFor
   \Statex \quad\textit{M-step: mixture weights}
@@ -637,18 +647,20 @@ see Table~\ref{tab:regime_selection}.
       \If{$\|r_m^{(P_m)}\|_{\gamma_m^{(q)}}^2 \ge \mathrm{Tol}_m$}
         \State Train mode $P_m{+}1$;\; $P_m \leftarrow P_m + 1$
       \EndIf
-      \If{$\sum_{i=1}^N \gamma_{im}^{(q)}\,\|\phi_{P_m}^{(m)}(\cdot;\kappa^{(i)})\,\psi_{P_m}^{(m)}(t^{(i)};\kappa^{(i)})\|^2 < \varepsilon_p$}
+      \If{$\|\phi_{P_m}^{(m)}\|_w^2\cdot\displaystyle\sum_{i=1}^N
+        \gamma_{im}^{(q)}\,\bigl(\lambda_{P_m}^{(m,i)}\bigr)^2 < \varepsilon_p$}
         \State $P_m \leftarrow P_m - 1$
       \EndIf
     \Else
       \hfill \textsc{Full rerun}
-      \State $\Phi_m^{(q)} \leftarrow$
+      \State $\Phi_m^{(q)},\,\Lambda_m^{(q)} \leftarrow$
         \Call{WeightedNeuralPOD}
-        {$\{s^{(i)},t^{(i)},\kappa^{(i)},\gamma_{im}^{(q)}\},\,\mathrm{Tol}_m$}
+        {$\{s^{(i)},\gamma_{im}^{(q)}\},\,\mathrm{Tol}_m$}
     \EndIf
   \EndFor
 \Until{$\max_m \Delta_m^{(q)} < \varepsilon_c$}
 \State \Return $\Phi_m^* \!\leftarrow\! \Phi_m^{(q)}$,\;
+  $\Lambda_m^* \!\leftarrow\! \Lambda_m^{(q)}$,\;
   $\gamma_{im}^* \!\leftarrow\! \gamma_{im}^{(q)}$,\;
   $\pi_m^* \!\leftarrow\! \pi_m^{(q)}$
 \end{algorithmic}
@@ -666,21 +678,24 @@ and $M$ \textbf{BranchNets}
 $\mathcal{B}_m: \mathbb{R}^{m_s + d_\kappa} \to \mathbb{R}^{P_m}$,
 each mapping sensor observations $u_0$ and parameter
 $\kappa$ to regime weights and expansion coefficients, respectively.
-The TEMPO prediction at query point $x \in \Omega$ is
+The TEMPO prediction at query point $y = (x,t) \in \Omega\times\mathcal{T}$ is
 \begin{equation}
-  \hat{s}(x;\,u_0,\kappa)
+  \hat{s}(y;\,u_0,\kappa)
   = \sum_{m=1}^{M} w_m(u_0,\kappa)
     \left[
-      \phi_0^{(m)}\!(x;\kappa)
+      \phi_0^{(m)}\!(y)
       + \sum_{k=1}^{P_m}
         b_{m,k}(u_0,\kappa)\;
-        \phi_k^{(m)}\!(x;\kappa)
+        \phi_k^{(m)}\!(y)
     \right],
   \label{eq:predict}
 \end{equation}
 where $\mathbf{w} = \mathcal{W}(u_0,\kappa)$ and
 $\mathbf{b}_m = \mathcal{B}_m(u_0,\kappa)$.
-The prediction is mesh-free and evaluable at any $x \in \Omega$
+The BranchNet outputs $\mathbf{b}_m$ are the online predictions of the offline
+amplitudes $\boldsymbol{\lambda}_m^{(i)}$, enabling generalisation to unseen
+$(u_0,\kappa)$.
+The prediction is mesh-free and evaluable at any $y\in\Omega\times\mathcal{T}$
 without retraining.
 
 \paragraph{Training objective.}

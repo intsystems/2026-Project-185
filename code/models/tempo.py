@@ -88,7 +88,7 @@ class TEMPOTrainer:
                 gamma_m = self.gamma[:, m].to(s.device)
                 mean, modes, coeffs = self._basis_components(trainer, x, s.device)
                 for i in range(0, N, 256):
-                    s_hat  = mean + coeffs[i:i+256] @ modes.T
+                    s_hat = mean + coeffs[i:i+256] @ modes.T
                     res_sq = ((s[i:i+256] - s_hat) ** 2 * w[None, :]).sum(dim=1)
                     total += (gamma_m[i:i+256] * res_sq).sum().item()
         self.cfg.sigma2 = 0.5 * total / N
@@ -101,7 +101,7 @@ class TEMPOTrainer:
         return trainer.basis.coeffs.detach()
 
     def _init_gmm(self, alpha: Tensor, device: torch.device) -> tuple:
-        """GMM on alpha -> initial gamma, pi, mu, Sigma."""
+        """GMM on alpha: returns (gamma, pi, mu, Sigma)."""
         alpha_np = alpha.cpu().double().numpy()
         gmm = GaussianMixture(n_components=self.cfg.M, covariance_type="full",
                               init_params='k-means++',
@@ -113,9 +113,9 @@ class TEMPOTrainer:
 
         return (
             to_tensor(gmm.predict_proba(alpha_np)),  # (N, M)
-            to_tensor(gmm.weights_),                  # (M,)
-            to_tensor(gmm.means_),                    # (M, P)
-            to_tensor(gmm.covariances_),              # (M, P, P)
+            to_tensor(gmm.weights_),  # (M,)
+            to_tensor(gmm.means_),  # (M, P)
+            to_tensor(gmm.covariances_),  # (M, P, P)
         )
 
     def _init_bases(self, s: Tensor, x: Tensor, t: Tensor, kappa: Tensor) -> list:
@@ -148,14 +148,14 @@ class TEMPOTrainer:
             delta = self._delta(mu_new, Sigma_new)
 
             self.gamma = gamma_new
-            self.pi    = pi_new
-            self.mu    = mu_new
+            self.pi = pi_new
+            self.mu = mu_new
             self.Sigma = Sigma_new
 
-            entropy  = -(gamma_new * gamma_new.clamp(min=1e-10).log()).sum(dim=1).mean().item()
-            bic      = -2.0 * ll + k_bic * torch.tensor(N).float().log().item()
+            entropy = -(gamma_new * gamma_new.clamp(min=1e-10).log()).sum(dim=1).mean().item()
+            bic = -2.0 * ll + k_bic * torch.tensor(N).float().log().item()
             delta_str = " ".join(f"{d:.3e}" for d in delta.tolist())
-            pi_str    = " ".join(f"{p:.3f}" for p in pi_new.tolist())
+            pi_str = " ".join(f"{p:.3f}" for p in pi_new.tolist())
             print(f"EM {em_iter:3d} | LL={ll:.4e} | BIC={bic:.4e} | H={entropy:.3f}")
             print(f"       | delta=[{delta_str}] | pi=[{pi_str}]")
 
@@ -181,9 +181,9 @@ class TEMPOTrainer:
                 trainer.basis.coeffs.to(dev),
             )
         # FourierNeuralPODTrainer
-        x_dev  = x.to(dev)
-        mean   = trainer.basis.mean_net(x_dev)
-        modes  = torch.stack([md.phi(x_dev) for md in trainer.basis.modes], dim=1)
+        x_dev = x.to(dev)
+        mean = trainer.basis.mean_net(x_dev)
+        modes = torch.stack([md.phi(x_dev) for md in trainer.basis.modes], dim=1)
         coeffs = torch.stack([md.lambda_ten for md in trainer.basis.modes], dim=1).to(dev)
         return mean, modes, coeffs
 
@@ -202,7 +202,7 @@ class TEMPOTrainer:
                 mean, modes, coeffs = self._basis_components(trainer, x, s.device)
                 log_pi = self.pi[m].clamp(min=1e-30).log()
                 for i in range(0, N, 256):
-                    s_hat  = mean + coeffs[i:i+256] @ modes.T
+                    s_hat = mean + coeffs[i:i+256] @ modes.T
                     res_sq = ((s[i:i+256] - s_hat) ** 2 * w[None, :]).sum(dim=1)
                     log_p[i:i+256, m] = log_pi - res_sq / (2.0 * self.cfg.sigma2)
         log_max = log_p.max(dim=1, keepdim=True).values
@@ -212,13 +212,13 @@ class TEMPOTrainer:
 
     def _compute_stats(self, gamma: Tensor) -> tuple[Tensor, Tensor]:
         """Responsibility-weighted mean (M, P) and covariance (M, P, P) of alpha."""
-        N_m = gamma.sum(dim=0).clamp(min=1e-8)                    # (M,)
-        mu = (gamma.T @ self.alpha) / N_m[:, None]                 # (M, P)
+        N_m = gamma.sum(dim=0).clamp(min=1e-8)  # (M,)
+        mu = (gamma.T @ self.alpha) / N_m[:, None]  # (M, P)
         P = self.alpha.shape[1]
         Sigma = torch.zeros(self.cfg.M, P, P,
                             device=self.alpha.device, dtype=self.alpha.dtype)
         for m in range(self.cfg.M):
-            diff = self.alpha - mu[m]                              # (N, P)
+            diff = self.alpha - mu[m]  # (N, P)
             A = (gamma[:, m] / N_m[m]).sqrt().unsqueeze(1) * diff  # (N, P)
             Sigma[m] = A.T @ A
         return mu, Sigma
@@ -228,9 +228,9 @@ class TEMPOTrainer:
         eps = 1e-8
         d_mu = (torch.norm(mu_new - self.mu, dim=1) /
                 (torch.norm(self.mu, dim=1) + eps))
-        d_S  = (torch.linalg.matrix_norm(Sigma_new - self.Sigma, ord='fro') /
+        d_S = (torch.linalg.matrix_norm(Sigma_new - self.Sigma, ord='fro') /
                 (torch.linalg.matrix_norm(self.Sigma, ord='fro') + eps))
-        return d_mu + d_S   # (M,)
+        return d_mu + d_S  # (M,)
 
     def _m2_step(self, s: Tensor, x: Tensor, t: Tensor, kappa: Tensor,
                  gamma: Tensor, delta: Tensor) -> None:
@@ -266,22 +266,18 @@ class TEMPOTrainer:
 
     def _m2_incremental_fourier(self, trainer: FourierNeuralPODTrainer,
                                 s: Tensor, x: Tensor, gamma_m: Tensor) -> None:
-        """Add or prune one mode using updated responsibilities (warm start).
-
-        Existing modes are kept. New mode added if residual norm exceeds tol.
-        Last mode pruned if its weighted contribution is negligible.
-        """
-        gamma_m    = gamma_m / gamma_m.sum()
-        gamma_cpu  = gamma_m.cpu()
+        """Add one mode if residual exceeds tol; prune last mode if its contribution is negligible."""
+        gamma_m = gamma_m / gamma_m.sum()
+        gamma_cpu = gamma_m.cpu()
         w = self._w
 
         # Recompute tolerance with updated gamma
-        s_mean     = (gamma_cpu[:, None] * s.cpu()).sum(dim=0)
+        s_mean = (gamma_cpu[:, None] * s.cpu()).sum(dim=0)
         s_centered = s.cpu() - s_mean[None, :]
-        w_cpu      = w.cpu()
-        tol_abs    = trainer.cfg.tol * _weighted_norm_sq(s_centered, gamma_cpu, w_cpu)
+        w_cpu = w.cpu()
+        tol_abs = trainer.cfg.tol * _weighted_norm_sq(s_centered, gamma_cpu, w_cpu)
 
-        # Residual after all existing modes (snapshot space); r lives on CPU
+        # Residual after all existing modes, on CPU
         with torch.no_grad():
             r = trainer._full_residual(s, x)
             for mode in trainer.basis.modes:
@@ -299,9 +295,9 @@ class TEMPOTrainer:
         if trainer.basis.modes:
             last_mode = trainer.basis.modes[-1]
             with torch.no_grad():
-                phi    = last_mode.phi(x)                                      # (Ny,)
-                contrib = torch.outer(phi, last_mode.lambda_ten).T             # (N, Ny)
+                phi = last_mode.phi(x)  # (Ny,)
+                contrib = torch.outer(phi, last_mode.lambda_ten).T  # (N, Ny)
             if _weighted_norm_sq(contrib, gamma_m, w) < self.cfg.eps_prune:
                 trainer.basis.modes = nn.ModuleList(list(trainer.basis.modes)[:-1])
-                trainer.num_modes  -= 1
-                print(f"    pruned last mode -> {trainer.num_modes} modes")
+                trainer.num_modes -= 1
+                print(f"    pruned last mode, now {trainer.num_modes} modes")

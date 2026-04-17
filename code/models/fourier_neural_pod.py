@@ -15,9 +15,9 @@ from .neural_pod_mode import FourierPODMode
 
 def _weighted_norm_sq(r: Tensor, gamma: Tensor, w: Tensor) -> float:
     """Weighted squared norm: sum_i gamma_i * sum_j w_j * r_ij^2. Always on CPU."""
-    r_cpu     = r.cpu().float()
+    r_cpu = r.cpu().float()
     gamma_cpu = gamma.cpu().float()
-    w_cpu     = w.cpu().float()
+    w_cpu = w.cpu().float()
     return (gamma_cpu * (r_cpu ** 2 * w_cpu[None, :]).sum(dim=1)).sum().item()
 
 
@@ -90,8 +90,8 @@ class FourierNeuralPODTrainer:
             gamma: (N,) responsibility weights; uniform 1/N if None
         """
         N, Ny = s.shape
-        dtype  = s.dtype
-        dev    = self._device
+        dtype = s.dtype
+        dev = self._device
 
         x = x.to(device=dev, dtype=dtype)
         w = self.basis.quad_weights.to(device=dev, dtype=dtype)  # (Ny,)
@@ -104,15 +104,14 @@ class FourierNeuralPODTrainer:
 
         print(f"Fourier NeuralPOD | N={N}, Ny={Ny} | max_modes={self.cfg.max_modes} | traj_batch={self.cfg.traj_batch_size}")
 
-        # weighted mean on CPU (s stays on CPU)
-        s_mean_cpu = (gamma_cpu[:, None] * s.cpu()).sum(dim=0)    # (Ny,)
-        s_mean_dev = s_mean_cpu.to(dev)                            # (Ny,) on GPU
-        s_centered = s.cpu() - s_mean_cpu[None, :]                 # (N, Ny) on CPU
+        s_mean_cpu = (gamma_cpu[:, None] * s.cpu()).sum(dim=0)  # (Ny,) on CPU
+        s_mean_dev = s_mean_cpu.to(dev)
+        s_centered = s.cpu() - s_mean_cpu[None, :]  # (N, Ny) on CPU
 
         self._tol_abs = self.cfg.tol * _weighted_norm_sq(s_centered, gamma_cpu, w)
 
         self._train_mean(s_mean_dev, x, w)
-        r = self._full_residual(s, x)           # (N, Ny) on CPU
+        r = self._full_residual(s, x)  # (N, Ny) on CPU
 
         self.num_modes = 0
         while (
@@ -130,22 +129,18 @@ class FourierNeuralPODTrainer:
         print(f"  done: {self.num_modes} modes\n")
         return self.history
 
-    # Residual helpers: phi(x) evaluated on GPU, r stored on CPU.
-
     @torch.no_grad()
     def _full_residual(self, s: Tensor, x: Tensor) -> Tensor:
-        """(N, Ny) on CPU: s - mean_net(x)."""
-        mean_cpu = self.basis.mean_net(x).cpu()   # (Ny,)
+        """Returns (N, Ny) on CPU: s - mean_net(x)."""
+        mean_cpu = self.basis.mean_net(x).cpu()
         return (s.cpu() - mean_cpu[None, :]).detach()
 
     @torch.no_grad()
     def _update_residual(self, r: Tensor, mode: FourierPODMode, x: Tensor) -> Tensor:
-        """(N, Ny) on CPU: r - outer(lambda, phi(x))."""
-        phi_cpu    = mode.phi(x).cpu()            # (Ny,)
-        lambda_cpu = mode.lambda_ten.cpu()        # (N,)
+        """Returns (N, Ny) on CPU: r - outer(lambda, phi(x))."""
+        phi_cpu = mode.phi(x).cpu()
+        lambda_cpu = mode.lambda_ten.cpu()
         return (r.cpu() - torch.outer(lambda_cpu, phi_cpu)).detach()
-
-    # Mean training: full batch on GPU (x, s_mean, w are all Ny-sized).
 
     def _train_mean(self, s_mean: Tensor, x: Tensor, w: Tensor) -> None:
         """Loss: sum_j w_j (mean_net(x_j) - s_mean_j)^2  (full batch on GPU)."""
@@ -168,25 +163,18 @@ class FourierNeuralPODTrainer:
                 self.history.mean_loss.append(loss.item())
                 pbar.set_postfix(loss=f"{loss.item():.3e}")
 
-    # Mode training: batched over N trajectories.
-
     def _train_mode(
         self, mode: FourierPODMode, r: Tensor, x: Tensor,
         gamma_dev: Tensor, gamma_cpu: Tensor, w: Tensor
     ) -> None:
-        """Loss: sum_i gamma_i sum_j w_j (phi(x_j) * lambda_i - r_ij)^2.
-
-        phi(x) is evaluated once per epoch on GPU.
-        Trajectory batches r[i:i+B] are moved to GPU inside the loop.
-        Gradients accumulate across batches before each optimizer step.
-        """
-        B   = self.cfg.traj_batch_size
-        N   = r.shape[0]
+        """Loss: sum_i gamma_i sum_j w_j (phi(x_j) * lambda_i - r_ij)^2."""
+        B = self.cfg.traj_batch_size
+        N = r.shape[0]
         dev = self._device
 
         opt = AdamW([
-            {"params": mode.phi.parameters(),  "lr": self.cfg.lr,        "weight_decay": 1e-2},
-            {"params": [mode.lambda_ten],       "lr": self.cfg.lr_lambda, "weight_decay": 0.0},
+            {"params": mode.phi.parameters(), "lr": self.cfg.lr, "weight_decay": 1e-2},
+            {"params": [mode.lambda_ten], "lr": self.cfg.lr_lambda, "weight_decay": 0.0},
         ])
         scheduler = OneCycleLR(
             opt, max_lr=self.cfg.max_lr,
@@ -203,18 +191,18 @@ class FourierNeuralPODTrainer:
             opt.zero_grad()
             epoch_loss = 0.0
 
-            phi = mode.phi(x)   # (Ny,) evaluated once; reused across all batches
+            phi = mode.phi(x)  # (Ny,) evaluated once per epoch
 
             for i in range(0, N, B):
-                r_b      = r[i : i + B].to(dev)          # (B, Ny)
-                gamma_b  = gamma_dev[i : i + B]           # (B,)
+                r_b = r[i : i + B].to(dev)  # (B, Ny)
+                gamma_b = gamma_dev[i : i + B]  # (B,)
 
-                lam_b    = mode.lambda_ten[i : i + B]     # (B,)
-                pred     = torch.outer(phi, lam_b)        # (Ny, B)
+                lam_b = mode.lambda_ten[i : i + B]  # (B,)
+                pred = torch.outer(phi, lam_b)  # (Ny, B)
 
-                diff     = (pred - r_b.T) ** 2            # (Ny, B)
-                loss_b   = (diff * w[:, None] * gamma_b[None, :]).sum()
-                loss_b.backward(retain_graph=(i + B < N)) # retain graph for phi until last batch
+                diff = (pred - r_b.T) ** 2  # (Ny, B)
+                loss_b = (diff * w[:, None] * gamma_b[None, :]).sum()
+                loss_b.backward(retain_graph=(i + B < N))
 
                 epoch_loss += loss_b.item()
 

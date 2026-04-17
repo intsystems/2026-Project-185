@@ -135,7 +135,7 @@ class PODTrainer:
         del V
 
         coeffs = (s @ modes - (mean @ modes).unsqueeze(0)).cpu()  # (N, P)
-        modes  = modes.cpu()                                        # (Ny, P)
+        modes = modes.cpu()  # (Ny, P)
 
         self.basis.initialize(mean, modes, coeffs)
         self.num_modes = P
