@@ -73,7 +73,7 @@
 
 \begin{column}{0.48\textwidth}
   \centering
-  \includegraphics[width=0.82\textwidth]{TEMPO/ideas/TEMPO_snaps.png}
+  \includegraphics[width=0.82\textwidth]{TEMPO/main/pictures/TEMPO_snaps.png}
 
   \vspace{0.12cm}
   \small
@@ -81,10 +81,7 @@
   \textbf{Online:}
   $\displaystyle\hat{s} = \sum_m w_m\Bigl[\phi_0^{(m)} + \sum_k b_{mk}\,\phi_k^{(m)}\Bigr]$
 
-  \vspace{0.15cm}
-  {\footnotesize\itshape
-  Example: Burgers' eq., $\nu{=}0.001$ (shocks) vs $\nu{=}1.0$
-  (smooth diffusion) require different basis geometry.}
+
 \end{column}
 
 \begin{column}{0.48\textwidth}
@@ -106,12 +103,7 @@
 
   \vspace{0.15cm}
 
-  \footnotesize
-  \begin{tabular}{ll}
-    $\phi_k^{(m)}$ & mode $k$ of regime $m$ \\[2pt]
-    $w_m(u_0,\kappa)$ & gating weight \\[2pt]
-    $\gamma_{im}$ & soft EM assignment \\
-  \end{tabular}
+
 
 \end{column}
 \end{columns}
@@ -394,14 +386,13 @@ and unlike the baselines, maintains this accuracy \emph{simultaneously across al
   \begin{itemize}
     \item TEMPO: offline EM-GMM regime discovery $+$ dedicated basis per regime $+$ gated online operator
     \item NeuralPOD-DeepONet as a strong nonlinear single-regime baseline
-    \item Empirical evidence that EM regimes reflect solution geometry, not $\kappa$ labels
+    \item EM regimes reflect solution geometry and $\kappa$ labels
   \end{itemize}
 \end{block}
 
 \begin{block}{Main result}
-  Regime-specific bases achieve lower reconstruction error at equal mode count;
-  the gated operator outperforms all single-basis baselines, with largest gains
-  at regime extremes ($\nu{=}0.001$, $\nu{=}1.0$).
+  Regime-specific bases achieve lower reconstruction error at similar mode count;
+  the gated operator outperforms all single-basis baselines
 \end{block}
 
 \begin{block}{Future work}

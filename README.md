@@ -28,8 +28,8 @@
 
 - [LinkReview](LINKREVIEW.md)
 - [Code](code)
-- [Paper](paper/main.pdf)
-- [Slides](slides/main.pdf)
+- [Paper](paper/main_Rodion.pdf)
+- [Slides](slides/main_Rodion.pdf)
 
 ## Abstract
 

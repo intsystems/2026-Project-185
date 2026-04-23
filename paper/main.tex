@@ -1051,15 +1051,28 @@ NeuralPOD-DeepONet~\textit{(ours)}
 
 
 
+\section{Conclusion}
+
+Operator learning for parametric PDEs has largely assumed that a single learned representation suffices across the full parameter space.
+When the governing parameter drives qualitative change in solution structure, this assumption forces the basis to compromise between incompatible geometries, concentrating error precisely where accurate prediction matters most.
+
+TEMPO addresses this through a principled latent variable model.
+Expectation-Maximization over POD coefficient space discovers $M$ latent regimes without parameter supervision, and each regime receives a dedicated locally adapted POD or NeuralPOD basis.
+On 1D Burgers' equation spanning three orders of viscosity magnitude, the discovered regimes cross viscosity confirm that the partition reflects intrinsic solution geometry and  physical parameter label.
+Regime-specific bases achieve substantially lower reconstruction error at equal mode count than their global counterparts, and the gated online operator outperforms POD-DeepONet and NeuralPOD-DeepONet across the full viscosity range, with the largest gains at extremes where solution character differs most.
+
+Several directions remain open.
+Conditioning the mode functions on the physical parameter would allow each basis to encode parameter-dependent solution structure directly, reducing the residual error that regime-agnostic modes cannot capture.
+Extending TEMPO to multi-dimensional benchmarks will test whether regime discovery generalises beyond one-dimensional shock dynamics.
+Convergence guarantees for Generalized EM under nonlinear basis parameterisation are a further theoretical open problem.
+
 \newpage
 \clearpage
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \bibliographystyle{unsrtnat}
 \bibliography{references}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \newpage
 \appendix

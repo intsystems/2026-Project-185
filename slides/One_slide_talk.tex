@@ -1,0 +1,107 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usepackage{cmap}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{amssymb,amsfonts,amsmath}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows.meta,positioning}
+
+\usecolortheme{beaver}
+\usefonttheme[onlymath]{serif}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[page number]
+\setbeamertemplate{blocks}[rounded=true,shadow=true]
+\setbeamersize{text margin left=0.5cm,text margin right=0.5cm}
+
+\newcommand{\RR}{\mathbb{R}}
+\newcommand{\LL}{\mathcal{L}}
+\newcommand{\NN}{\mathcal{N}}
+
+\title[TEMPO]{TEMPO: EM-based Mixture-of-PODs \\ for Operator Learning}
+\date{\today}
+
+\begin{document}
+
+\frame{\titlepage}
+
+
+
+\begin{frame}{TEMPO: Regime-Aware Operator Learning with Locally Adapted Bases}
+
+\begin{columns}[T]
+
+\begin{column}{0.48\textwidth}
+  \centering
+  \includegraphics[width=0.8\textwidth]{TEMPO/ideas/TEMPO_snaps.png}
+
+  \vspace{0.1cm}
+\small
+\textbf{Offline:} EM-GMM $\Rightarrow$ $M$ bases $\{\Phi_m\}$ \\[4pt]
+\textbf{Online:} $\displaystyle\hat{s} = \sum_m w_m \sum_k b_{mk}\,\Phi_k^{(m)}$
+
+\end{column}
+
+\begin{column}{0.48\textwidth}
+
+  \textbf{Operator learning problem:}
+\[
+  \mathcal{G}:\mathcal{U}\times\mathcal{K}
+  \to L^2(\Omega\times\mathcal{T}),
+  \quad (u,\kappa)\mapsto s
+\]
+{\footnotesize
+Learn $\hat{\mathcal{G}} \approx \mathcal{G}$ from data $\mathcal{D}$
+without solving the PDE.
+}
+
+  \vspace{0.1cm}
+
+  \begin{block}{Challenge}
+  \small
+  A single basis fails when solutions
+  change character fundamentally across~$\kappa$.
+  \end{block}
+
+  \vspace{0.1cm}
+
+ \begin{block}{TEMPO}
+\small
+Discover $M$ latent regimes via EM-GMM,
+build a dedicated basis $\{\Phi_m\}$ per regime
+\textit{(POD or NeuralPOD)},
+route new inputs at inference time.
+\end{block}
+
+  \vspace{0.1cm}
+
+  \footnotesize
+  \begin{tabular}{ll}
+    $\Phi_k^{(m)}$ & POD mode $k$ of regime $m$ \\[2pt]
+    $w_m(u,\kappa)$ & gating weight \\[2pt]
+    $\gamma_{im}$ & soft EM assignment \\
+  \end{tabular}
+
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\end{document}
