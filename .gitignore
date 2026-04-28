@@ -188,3 +188,6 @@ snapshots/
 
 requirements.txt
 *.zip
+Hankel.ipynb
+slurm
+*.pt
