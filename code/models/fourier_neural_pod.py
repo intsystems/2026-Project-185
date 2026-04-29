@@ -47,6 +47,7 @@ class FourierNeuralPODConfig:
     n_epochs_mean: int = 165
     n_epochs_mode: int = 85
     traj_batch_size: int = 256   # batch size over N (trajectories)
+    epoch_subset: float = 1.0    # fraction of N sampled per epoch (< 1 speeds up EM)
     grad_clip_norm: float = 1.0
     pct_start: float = 0.1
     div_factor: float = 25.0
@@ -106,9 +107,10 @@ class FourierNeuralPODTrainer:
 
         s_mean_cpu = (gamma_cpu[:, None] * s.cpu()).sum(dim=0)  # (Ny,) on CPU
         s_mean_dev = s_mean_cpu.to(dev)
-        s_centered = s.cpu() - s_mean_cpu[None, :]  # (N, Ny) on CPU
 
+        s_centered = s.cpu() - s_mean_cpu[None, :]
         self._tol_abs = self.cfg.tol * _weighted_norm_sq(s_centered, gamma_cpu, w)
+        del s_centered
 
         self._train_mean(s_mean_dev, x, w)
         r = self._full_residual(s, x)  # (N, Ny) on CPU
@@ -183,6 +185,12 @@ class FourierNeuralPODTrainer:
             div_factor=self.cfg.div_factor,
         )
 
+        subset_n = max(B, int(self.cfg.epoch_subset * N))
+
+        # sample once: top-k by gamma (most active trajectories)
+        idx_subset = gamma_cpu.topk(subset_n).indices  # (subset_n,) on CPU
+        idx_subset_dev = idx_subset.to(dev)
+
         p = len(self.history.mode_losses) + 1
         pbar = tqdm(range(self.cfg.n_epochs_mode), desc=f"mode {p}", leave=False)
         mode_history: list[float] = []
@@ -191,18 +199,24 @@ class FourierNeuralPODTrainer:
             opt.zero_grad()
             epoch_loss = 0.0
 
+            perm = torch.randperm(subset_n)
+            idx_epoch     = idx_subset[perm]
+            idx_epoch_dev = idx_subset_dev[perm]
+
             phi = mode.phi(x)  # (Ny,) evaluated once per epoch
 
-            for i in range(0, N, B):
-                r_b = r[i : i + B].to(dev)  # (B, Ny)
-                gamma_b = gamma_dev[i : i + B]  # (B,)
+            for start in range(0, subset_n, B):
+                idx_b     = idx_epoch[start : start + B]
+                idx_b_dev = idx_epoch_dev[start : start + B]
 
-                lam_b = mode.lambda_ten[i : i + B]  # (B,)
-                pred = torch.outer(phi, lam_b)  # (Ny, B)
+                r_b     = r[idx_b].to(dev)               # (B, Ny)
+                gamma_b = gamma_dev[idx_b_dev]            # (B,)
+                lam_b   = mode.lambda_ten[idx_b_dev]      # (B,)
 
-                diff = (pred - r_b.T) ** 2  # (Ny, B)
+                pred   = torch.outer(phi, lam_b)          # (Ny, B)
+                diff   = (pred - r_b.T) ** 2              # (Ny, B)
                 loss_b = (diff * w[:, None] * gamma_b[None, :]).sum()
-                loss_b.backward(retain_graph=(i + B < N))
+                loss_b.backward(retain_graph=(start + B < subset_n))
 
                 epoch_loss += loss_b.item()
 

@@ -61,6 +61,7 @@ class TEMPOTrainer:
         self.mu: Tensor = None       # (M, P_global)
         self.Sigma: Tensor = None    # (M, P_global, P_global)
         self._w: Tensor = None       # (Ny,) quadrature weights
+        self.history_phase1: dict = None  # per-EM-iteration log
 
     def train(self, s: Tensor, x: Tensor, t: Tensor, kappa: Tensor = None) -> None:
         self._initialize(s, x, t, kappa)
@@ -82,14 +83,15 @@ class TEMPOTrainer:
     def _calibrate_sigma2(self, s: Tensor, x: Tensor) -> None:
         """Set sigma2, batched over N to avoid OOM."""
         N, total = s.shape[0], 0.0
-        w = self._w.to(s.device)
+        dev = x.device
+        w = self._w.to(dev)
         with torch.no_grad():
             for m, trainer in enumerate(self.trainers):
-                gamma_m = self.gamma[:, m].to(s.device)
-                mean, modes, coeffs = self._basis_components(trainer, x, s.device)
+                gamma_m = self.gamma[:, m].to(dev)
+                mean, modes, coeffs = self._basis_components(trainer, x, dev)
                 for i in range(0, N, 256):
-                    s_hat = mean + coeffs[i:i+256] @ modes.T
-                    res_sq = ((s[i:i+256] - s_hat) ** 2 * w[None, :]).sum(dim=1)
+                    s_hat = mean + coeffs[i:i+256].to(dev) @ modes.T
+                    res_sq = ((s[i:i+256].to(dev) - s_hat) ** 2 * w[None, :]).sum(dim=1)
                     total += (gamma_m[i:i+256] * res_sq).sum().item()
         self.cfg.sigma2 = 0.5 * total / N
         print(f"  calibrated sigma2 = {self.cfg.sigma2:.4e}")
@@ -135,6 +137,9 @@ class TEMPOTrainer:
         # BIC penalty: GMM parameters (means + covariances + mixing weights)
         k_bic = self.cfg.M * P + self.cfg.M * P * (P + 1) // 2 + (self.cfg.M - 1)
 
+        log: dict = {'iter': [], 'll': [], 'bic': [], 'entropy': [],
+                     'delta': [], 'delta_max': [], 'pi': []}
+
         for em_iter in range(1, self.cfg.max_em_iters + 1):
             print(f"\n{'─' * 65}")
             print(f"E-step {em_iter}...")
@@ -159,12 +164,22 @@ class TEMPOTrainer:
             print(f"EM {em_iter:3d} | LL={ll:.4e} | BIC={bic:.4e} | H={entropy:.3f}")
             print(f"       | delta=[{delta_str}] | pi=[{pi_str}]")
 
+            log['iter'].append(em_iter)
+            log['ll'].append(ll)
+            log['bic'].append(bic)
+            log['entropy'].append(entropy)
+            log['delta'].append(delta.tolist())
+            log['delta_max'].append(delta.max().item())
+            log['pi'].append(pi_new.tolist())
+
             print("M2-step: updating bases...")
             self._m2_step(s, x, t, kappa, gamma_new, delta)
 
             if delta.max().item() < self.cfg.eps_conv:
                 print(f"\n  converged at iteration {em_iter}")
                 break
+
+        self.history_phase1 = log
 
     def _basis_components(self, trainer, x: Tensor, dev: torch.device):
         """Extract (mean, modes, coeffs) on dev for batched evaluation.
@@ -191,24 +206,26 @@ class TEMPOTrainer:
         """Posterior responsibilities gamma (N, M) and log-likelihood, batched over N.
 
         Returns:
-            gamma: (N, M) soft assignments
+            gamma: (N, M) soft assignments on s.device
             ll:    scalar log-likelihood sum_i log sum_m pi_m p(s_i | m)
         """
         N = s.shape[0]
-        log_p = torch.empty(N, self.cfg.M, device=s.device, dtype=s.dtype)
-        w = self._w.to(s.device)
+        dev = x.device  # run matmuls on GPU; s stays on CPU
+        log_p = torch.empty(N, self.cfg.M, device=dev, dtype=s.dtype)
+        w = self._w.to(dev)
         with torch.no_grad():
             for m, trainer in enumerate(self.trainers):
-                mean, modes, coeffs = self._basis_components(trainer, x, s.device)
-                log_pi = self.pi[m].clamp(min=1e-30).log()
+                mean, modes, coeffs = self._basis_components(trainer, x, dev)
+                log_pi = self.pi[m].clamp(min=1e-30).log().to(dev)
                 for i in range(0, N, 256):
-                    s_hat = mean + coeffs[i:i+256] @ modes.T
-                    res_sq = ((s[i:i+256] - s_hat) ** 2 * w[None, :]).sum(dim=1)
+                    s_hat = mean + coeffs[i:i+256].to(dev) @ modes.T
+                    res_sq = ((s[i:i+256].to(dev) - s_hat) ** 2 * w[None, :]).sum(dim=1)
                     log_p[i:i+256, m] = log_pi - res_sq / (2.0 * self.cfg.sigma2)
         log_max = log_p.max(dim=1, keepdim=True).values
         p = (log_p - log_max).exp()
         ll = (log_max.squeeze(1) + p.sum(dim=1).log()).sum().item()
-        return p / p.sum(dim=1, keepdim=True), ll
+        gamma = p / p.sum(dim=1, keepdim=True)
+        return gamma.to(s.device), ll
 
     def _compute_stats(self, gamma: Tensor) -> tuple[Tensor, Tensor]:
         """Responsibility-weighted mean (M, P) and covariance (M, P, P) of alpha."""

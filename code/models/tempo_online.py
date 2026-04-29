@@ -162,6 +162,9 @@ class TEMPOOnlineTrainer:
             TensorDataset(u0_sensors, kappa, s, gamma_star),
             batch_size=self.cfg.batch_size,
             shuffle=True,
+            pin_memory=(device.type == "cuda"),
+            num_workers=2,
+            persistent_workers=True,
         )
         opt = torch.optim.AdamW(self.model.parameters(),
                                 lr=self.cfg.lr, weight_decay=1e-4)
@@ -173,10 +176,10 @@ class TEMPOOnlineTrainer:
             epoch_loss = l_data_ep = l_kl_ep = l_ent_ep = 0.0
 
             for u0_b, kappa_b, s_b, gamma_b in dl:
-                u0_b = u0_b.to(device)
-                kappa_b = kappa_b.to(device)
-                s_b = s_b.to(device)
-                gamma_b = gamma_b.to(device)
+                u0_b = u0_b.to(device, non_blocking=True)
+                kappa_b = kappa_b.to(device, non_blocking=True)
+                s_b = s_b.to(device, non_blocking=True)
+                gamma_b = gamma_b.to(device, non_blocking=True)
 
                 s_hat, w = self.model(u0_b, kappa_b, means_dev, modes_dev)
 

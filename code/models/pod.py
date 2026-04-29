@@ -116,9 +116,11 @@ class PODTrainer:
             s_weighted_gpu = s.sub(mean.unsqueeze(0)).mul_(sqrt_gamma.unsqueeze(1)).to(dtype=torch.float32)
 
         # randomized SVD: top-q singular vectors, O(N*q) memory
+        # MPS does not support linalg_qr used internally by svd_lowrank
         q = min(self.cfg.max_modes + 10, min(N, Ny))
-        _, sigma, V = torch.svd_lowrank(s_weighted_gpu, q=q, niter=4)
-        del s_weighted_gpu
+        svd_input = s_weighted_gpu.cpu() if s_weighted_gpu.device.type == "mps" else s_weighted_gpu
+        _, sigma, V = torch.svd_lowrank(svd_input, q=q, niter=4)
+        del s_weighted_gpu, svd_input
 
         sigma = sigma.to(dtype=dtype)
         energy = sigma ** 2
