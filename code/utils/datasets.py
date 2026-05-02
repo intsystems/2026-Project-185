@@ -7,12 +7,20 @@ DATA_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 )
 
+DARCY_DATASETS = {
+    "DarcyFlow_beta0.01":  (0.01,  "2D_DarcyFlow_beta0.01_Train.hdf5"),
+    "DarcyFlow_beta0.1":   (0.1,   "2D_DarcyFlow_beta0.1_Train.hdf5"),
+    "DarcyFlow_beta1.0":   (1.0,   "2D_DarcyFlow_beta1.0_Train.hdf5"),
+    "DarcyFlow_beta10.0":  (10.0,  "2D_DarcyFlow_beta10.0_Train.hdf5"),
+    "DarcyFlow_beta100.0": (100.0, "2D_DarcyFlow_beta100.0_Train.hdf5"),
+}
+
 HF_REPO = "erbacher/PDEBench-1D"
 
 # (hf_config, split, x_range, t_range, n_channels)
 #  n_channels: 1 for scalar fields, 3 for CFD (rho/v/p), 2 for ReacDiff (u/v)
 DATASETS = {
-    # Burgers: Nx=1024, Nt=101, x in (-1,1), t in (0,2), V=1
+    # Burgers: Nx=1024, Nt=201, x in (-1,1), t in (0,2), V=1
     "Burgers_Nu0.001": ("Burgers_Sols_Nu0.001", "train", (-1.0, 1.0), (0.0, 2.0), 1),
     "Burgers_Nu0.002": ("Burgers_Sols_Nu0.002", "train", (-1.0, 1.0), (0.0, 2.0), 1),
     "Burgers_Nu0.004": ("Burgers_Sols_Nu0.004", "train", (-1.0, 1.0), (0.0, 2.0), 1),
@@ -132,3 +140,53 @@ def load_stacked(
         print(f"  kappa={kappa_val}: {n_per} trajectories loaded")
 
     return s, kappa, x_np, t_np, Nx, Nt
+
+
+def load_darcy_stacked(
+    entries: list[tuple[float, str]],
+    n_samples: int = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]:
+    """Stack Darcy Flow HDF5 files into pre-allocated arrays.
+
+    Each file: nu (N, Nx, Ny) permeability input, tensor (N, 1, Nx, Ny) pressure output.
+
+    Returns: s (N_total, Nx*Ny), a (N_total, Nx*Ny), kappa (N_total,), xy (Nx*Ny, 2), Nx, Ny
+      s     - output pressure field u(x,y), flattened
+      a     - input permeability field a(x,y), flattened
+      kappa - beta value per sample
+      xy    - grid coordinates (Nx*Ny, 2) for NeuralPOD mode networks
+    """
+    _, path0 = entries[0]
+    with h5py.File(path0, "r") as f:
+        shape = f["tensor"].shape          # (N_file, 1, Nx, Ny)
+        Nx, Ny = shape[2], shape[3]
+        x_np = f["x-coordinate"][:]        # (Nx,)
+        y_np = f["y-coordinate"][:]        # (Ny,)
+        n_file = shape[0]
+
+    n_per   = min(n_samples, n_file) if n_samples is not None else n_file
+    n_total = n_per * len(entries)
+    Nxy     = Nx * Ny
+
+    print(f"Darcy: Nx={Nx}, Ny={Ny}, n_per_beta={n_per}, "
+          f"N_total={n_total}, s≈{n_total*Nxy*4/1e9:.1f} GB")
+
+    s     = np.empty((n_total, Nxy), dtype=np.float32)
+    a     = np.empty((n_total, Nxy), dtype=np.float32)
+    kappa = np.empty(n_total,        dtype=np.float32)
+
+    for i, (beta_val, path) in enumerate(entries):
+        with h5py.File(path, "r") as f:
+            u = f["tensor"][:n_per, 0]     # (n_per, Nx, Ny)
+            v = f["nu"][:n_per]            # (n_per, Nx, Ny)
+        sl        = slice(i * n_per, (i + 1) * n_per)
+        s[sl]     = u.reshape(n_per, Nxy).astype(np.float32, copy=False)
+        a[sl]     = v.reshape(n_per, Nxy).astype(np.float32, copy=False)
+        kappa[sl] = beta_val
+        del u, v
+        print(f"  beta={beta_val}: {n_per} samples loaded")
+
+    xx, yy = np.meshgrid(x_np, y_np, indexing="ij")  # (Nx, Ny) each
+    xy_np  = np.stack([xx.ravel(), yy.ravel()], axis=1).astype(np.float32)  # (Nxy, 2)
+
+    return s, a, kappa, xy_np, Nx, Ny
