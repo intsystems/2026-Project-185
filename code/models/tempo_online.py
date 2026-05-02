@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import torch
@@ -120,6 +121,7 @@ class TEMPOOnlineConfig:
     lambda_kl: float = 0.1
     lambda_ent: float = 0.1
     log_every: int = 50
+    val_every: int = 50
 
 
 class TEMPOOnlineTrainer:
@@ -136,15 +138,19 @@ class TEMPOOnlineTrainer:
     def __init__(self, model: TEMPOOnline, cfg: TEMPOOnlineConfig) -> None:
         self.model = model
         self.cfg = cfg
+        self.val_history: list[tuple[int, float]] = []
 
     def train(
         self,
-        s: Tensor,       # (N, Ny)    full trajectories, CPU ok
-        u0: Tensor,      # (N, Nx)    initial conditions, CPU ok
-        kappa: Tensor,   # (N, d_kappa)
-        x_flat: Tensor,  # (Ny, 2)    spatiotemporal coordinates
-        gamma_star: Tensor,  # (N, M) offline EM responsibilities
-        trainers: list,  # M frozen PODTrainer / FourierNeuralPODTrainer
+        s: Tensor,           # (N, Ny)     full trajectories, CPU ok
+        u0: Tensor,          # (N, Nx)     initial conditions, CPU ok
+        kappa: Tensor,       # (N, d_kappa)
+        x_flat: Tensor,      # (Ny, 2)     spatiotemporal coordinates
+        gamma_star: Tensor,  # (N, M)      offline EM responsibilities
+        trainers: list,      # M frozen PODTrainer / FourierNeuralPODTrainer
+        val_s: Tensor = None,      # (N_val, Ny)      optional val snapshots
+        val_u0: Tensor = None,     # (N_val, Nx)      optional val inputs
+        val_kappa: Tensor = None,  # (N_val, d_kappa)
     ) -> dict[str, list[float]]:
         device = next(self.model.parameters()).device
         stride = self.cfg.sensor_stride
@@ -157,6 +163,13 @@ class TEMPOOnlineTrainer:
             modes_dev.append(modes.detach())
 
         u0_sensors = u0[:, ::stride]
+
+        self.val_history = []
+        do_val = val_s is not None and val_u0 is not None and val_kappa is not None
+        if do_val:
+            val_u0_sensors = val_u0[:, ::stride].to(device)
+            val_kappa_d    = val_kappa.to(device)
+            val_s_d        = val_s.to(device)
 
         dl = DataLoader(
             TensorDataset(u0_sensors, kappa, s, gamma_star),
@@ -208,9 +221,22 @@ class TEMPOOnlineTrainer:
             history['kl'].append(l_kl_ep / N)
             history['ent'].append(l_ent_ep / N)
 
+            if do_val and epoch % self.cfg.val_every == 0:
+                self.model.eval()
+                with torch.no_grad():
+                    parts = []
+                    for i in range(0, len(val_u0_sensors), 256):
+                        sv, _ = self.model(val_u0_sensors[i:i+256], val_kappa_d[i:i+256],
+                                           means_dev, modes_dev)
+                        parts.append(sv)
+                    vl = F.mse_loss(torch.cat(parts, dim=0), val_s_d).item()
+                self.model.train()
+                self.val_history.append((epoch, vl))
+
             if epoch % self.cfg.log_every == 0:
+                val_str = f"  val_data={self.val_history[-1][1]:.4e}" if self.val_history else ""
                 print(f"  epoch {epoch:4d} | loss={epoch_loss/N:.4e} | "
-                      f"data={l_data_ep/N:.4e}  kl={l_kl_ep/N:.4e}  ent={l_ent_ep/N:.4e}")
+                      f"data={l_data_ep/N:.4e}  kl={l_kl_ep/N:.4e}  ent={l_ent_ep/N:.4e}{val_str}")
 
         print(f"  done: final loss={history['total'][-1]:.4e}")
         return history
@@ -262,7 +288,7 @@ def build_tempo_online(
         (model, trainer)
     """
     M = len(trainers)
-    m_sensors = Nx // cfg.sensor_stride
+    m_sensors = math.ceil(Nx / cfg.sensor_stride)
     P_list = [_num_modes(t) for t in trainers]
 
     gating = GatingNet(m_sensors, d_kappa, M, cfg.hidden_dim, cfg.n_layers)

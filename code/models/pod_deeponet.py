@@ -22,6 +22,7 @@ class PODDeepONetConfig:
     n_layers: int = 4
     sensor_stride: int = 1  # spatial downsampling of u0 input
     log_every: int = 50
+    val_every: int = 50
 
 
 class BranchNet(nn.Module):
@@ -100,15 +101,18 @@ class PODDeepONetTrainer:
     def __init__(self, model: PODDeepONet, cfg: PODDeepONetConfig) -> None:
         self.model = model
         self.cfg = cfg
+        self.val_history: list[tuple] = []
 
-    def train(self, u0: Tensor) -> list[float]:
+    def train(self, u0: Tensor, val_u0: Tensor = None, val_s: Tensor = None) -> list[float]:
         """Train the branch net on POD coefficient regression.
 
         Args:
-            u0: (N_traj, Nx) — initial conditions at full spatial resolution
+            u0:     (N_traj, Nx)  — input fields at full spatial resolution
+            val_u0: (N_val, Nx)   — validation inputs (optional)
+            val_s:  (N_val, Nxy)  — validation snapshot targets (optional, CPU tensor ok)
 
         Returns:
-            per-epoch MSE losses on POD coefficients
+            per-epoch train MSE losses on POD coefficients; val history in self.val_history
         """
         basis = self.model.basis
         assert basis._initialized, "Run PODTrainer.train(s_traj) first."
@@ -122,6 +126,15 @@ class PODDeepONetTrainer:
         N, m = u0_sensors.shape
         P = targets.shape[1]
         print(f"PODDeepONet Phase 2 | N={N}, m={m}, P={P}")
+
+        # Precompute val targets: exact L2 projection of val snapshots onto POD basis
+        self.val_history = []
+        do_val = val_u0 is not None and val_s is not None
+        if do_val:
+            mean_d   = basis.mean.to(device)                                    # (Nxy,)
+            modes_d  = basis.modes.to(device)                                   # (Nxy, P)
+            val_sens = val_u0[:, ::stride].to(device)                          # (N_val, m)
+            val_tgt  = (val_s.to(device) - mean_d.unsqueeze(0)) @ modes_d     # (N_val, P)
 
         dl = DataLoader(TensorDataset(u0_sensors, targets),
                         batch_size=self.cfg.batch_size, shuffle=True)
@@ -141,10 +154,18 @@ class PODDeepONetTrainer:
 
             avg = total / len(dl)
             history.append(avg)
+            if do_val and epoch % self.cfg.val_every == 0:
+                self.model.branch.eval()
+                with torch.no_grad():
+                    vl = F.mse_loss(self.model.branch(val_sens), val_tgt).item()
+                self.model.branch.train()
+                self.val_history.append((epoch, vl))
             if epoch % self.cfg.log_every == 0:
-                print(f"  epoch {epoch:4d} | coeff_mse={avg:.4e}")
+                val_str = f"  val={self.val_history[-1][1]:.4e}" if self.val_history else ""
+                print(f"  epoch {epoch:4d} | coeff_mse={avg:.4e}{val_str}")
 
-        print(f"  done: final coeff_mse={history[-1]:.4e}")
+        val_str = f"  val={self.val_history[-1][1]:.4e}" if self.val_history else ""
+        print(f"  done: final coeff_mse={history[-1]:.4e}{val_str}")
         return history
 
     @torch.no_grad()

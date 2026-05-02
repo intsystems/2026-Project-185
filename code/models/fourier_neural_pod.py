@@ -42,11 +42,11 @@ class FourierNeuralPODConfig:
     tol: float = 1e-3
     lr: float = 5e-4
     lr_lambda: float = 1e-2
-    max_lr: float = 5e-3
+    max_lr: float = 9e-3
     max_modes: int = 5
     n_epochs_mean: int = 165
     n_epochs_mode: int = 85
-    traj_batch_size: int = 256   # batch size over N (trajectories)
+    traj_batch_size: int = 1024  # batch size over N (trajectories)
     epoch_subset: float = 1.0    # fraction of N sampled per epoch (< 1 speeds up EM)
     grad_clip_norm: float = 1.0
     pct_start: float = 0.1
@@ -191,6 +191,10 @@ class FourierNeuralPODTrainer:
         idx_subset = gamma_cpu.topk(subset_n).indices  # (subset_n,) on CPU
         idx_subset_dev = idx_subset.to(dev)
 
+        # preload residual subset to GPU to avoid repeated CPU→GPU transfers
+        r_sub_dev = r[idx_subset].to(dev)               # (subset_n, Ny)
+        gamma_sub = gamma_dev[idx_subset_dev]            # (subset_n,)
+
         p = len(self.history.mode_losses) + 1
         pbar = tqdm(range(self.cfg.n_epochs_mode), desc=f"mode {p}", leave=False)
         mode_history: list[float] = []
@@ -199,19 +203,16 @@ class FourierNeuralPODTrainer:
             opt.zero_grad()
             epoch_loss = 0.0
 
-            perm = torch.randperm(subset_n)
-            idx_epoch     = idx_subset[perm]
-            idx_epoch_dev = idx_subset_dev[perm]
+            perm = torch.randperm(subset_n, device=dev)
 
             phi = mode.phi(x)  # (Ny,) evaluated once per epoch
 
             for start in range(0, subset_n, B):
-                idx_b     = idx_epoch[start : start + B]
-                idx_b_dev = idx_epoch_dev[start : start + B]
+                idx_b_dev = perm[start : start + B]
 
-                r_b     = r[idx_b].to(dev)               # (B, Ny)
-                gamma_b = gamma_dev[idx_b_dev]            # (B,)
-                lam_b   = mode.lambda_ten[idx_b_dev]      # (B,)
+                r_b     = r_sub_dev[idx_b_dev]            # (B, Ny) — already on GPU
+                gamma_b = gamma_sub[idx_b_dev]            # (B,)
+                lam_b   = mode.lambda_ten[idx_subset_dev[idx_b_dev]]  # (B,)
 
                 pred   = torch.outer(phi, lam_b)          # (Ny, B)
                 diff   = (pred - r_b.T) ** 2              # (Ny, B)

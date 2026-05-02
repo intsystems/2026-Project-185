@@ -22,6 +22,7 @@ class NeuralPODDeepONetConfig:
     n_layers: int = 4
     sensor_stride: int = 1
     log_every: int = 50
+    val_every: int = 50
 
 
 class NeuralPODDeepONet(nn.Module):
@@ -76,15 +77,20 @@ class NeuralPODDeepONetTrainer:
     def __init__(self, model: NeuralPODDeepONet, cfg: NeuralPODDeepONetConfig) -> None:
         self.model = model
         self.cfg = cfg
+        self.val_history: list[tuple] = []
 
-    def train(self, u0: Tensor) -> list[float]:
+    def train(self, u0: Tensor, val_u0: Tensor = None, val_s: Tensor = None,
+              x_flat: Tensor = None) -> list[float]:
         """Train branch net on lambda coefficient regression.
 
         Args:
-            u0: (N_traj, Nx) — initial conditions at full spatial resolution
+            u0:     (N_traj, Nx)   — input fields at full spatial resolution
+            val_u0: (N_val, Nx)    — validation inputs (optional)
+            val_s:  (N_val, Nxy)   — validation snapshot targets (optional, CPU tensor ok)
+            x_flat: (Nxy, d_x)     — spatial coordinates; required when val data is provided
 
         Returns:
-            per-epoch MSE losses on lambda coefficients
+            per-epoch train MSE losses on lambda coefficients; val history in self.val_history
         """
         basis = self.model.basis
         K = len(basis.modes)
@@ -101,6 +107,23 @@ class NeuralPODDeepONetTrainer:
 
         N, m = u0_sensors.shape
         print(f"NeuralPOD-DeepONet Phase 2 | N={N}, m={m}, K={K}")
+
+        # Precompute val targets: optimal per-mode coefficients for val snapshots
+        self.val_history = []
+        do_val = val_u0 is not None and val_s is not None and x_flat is not None
+        if do_val:
+            with torch.no_grad():
+                mean_d   = basis.mean_net(x_flat)                             # (Nxy,)
+                residual = val_s.to(device) - mean_d.unsqueeze(0)             # (N_val, Nxy)
+                val_tgt_list = []
+                for md in basis.modes:
+                    phi_k    = md.phi(x_flat)                                 # (Nxy,)
+                    phi_sq_k = (phi_k ** 2).sum()
+                    c_k      = (residual @ phi_k) / phi_sq_k                  # (N_val,)
+                    val_tgt_list.append(c_k)
+                    residual = residual - c_k.unsqueeze(1) * phi_k.unsqueeze(0)
+                val_tgt = torch.stack(val_tgt_list, dim=1)                    # (N_val, K)
+            val_sens = val_u0[:, ::stride].to(device)                         # (N_val, m)
 
         dl = DataLoader(TensorDataset(u0_sensors, targets),
                         batch_size=self.cfg.batch_size, shuffle=True)
@@ -120,10 +143,18 @@ class NeuralPODDeepONetTrainer:
 
             avg = total / len(dl)
             history.append(avg)
+            if do_val and epoch % self.cfg.val_every == 0:
+                self.model.branch.eval()
+                with torch.no_grad():
+                    vl = F.mse_loss(self.model.branch(val_sens), val_tgt).item()
+                self.model.branch.train()
+                self.val_history.append((epoch, vl))
             if epoch % self.cfg.log_every == 0:
-                print(f"  epoch {epoch:4d} | coeff_mse={avg:.4e}")
+                val_str = f"  val={self.val_history[-1][1]:.4e}" if self.val_history else ""
+                print(f"  epoch {epoch:4d} | coeff_mse={avg:.4e}{val_str}")
 
-        print(f"  done: final coeff_mse={history[-1]:.4e}")
+        val_str = f"  val={self.val_history[-1][1]:.4e}" if self.val_history else ""
+        print(f"  done: final coeff_mse={history[-1]:.4e}{val_str}")
         return history
 
     @torch.no_grad()
