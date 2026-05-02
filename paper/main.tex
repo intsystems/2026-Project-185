@@ -274,7 +274,7 @@ The four methods differ along two independent axes:
 
 \begin{itemize}
   \item \textbf{Basis type.}
-    A \emph{linear} (POD) basis uses a global SVD of the snapshot
+    A \emph{linear} (POD) basis uses SVD of the (weighted) snapshot
     matrix; a \emph{nonlinear} (NeuralPOD) basis learns spatiotemporal
     mode networks by sequential residual minimization.
   \item \textbf{Number of regimes.}
@@ -297,51 +297,88 @@ Sections~\ref{sec:bases}--\ref{sec:online} develop each component.
 
 \subsubsection{POD Basis}
 
-Given $N$ training snapshots arranged as columns of
-$S \in \mathbb{R}^{N_y \times N}$, the rank-$K$ truncated SVD
-$S \approx U_K \Sigma_K V_K^\top$
-yields orthonormal spatial modes $\{\phi_k\}_{k=1}^K$
-(columns of $U_K$) and scalar coefficients
-$\lambda_k^{(i)} = [\Sigma_K V_K^\top]_{ki}$.
-The approximation
+Let $\bar{s} = \tfrac{1}{N}\sum_i s^{(i)}$ and let
+$\tilde{S} \in \mathbb{R}^{N_y \times N}$ have columns
+$\tilde{s}^{(i)} = s^{(i)} - \bar{s}$.
+The rank-$K$ truncated SVD $\tilde{S} \approx U_K \Sigma_K V_K^\top$
+yields orthonormal modes $\{\phi_k\}_{k=1}^K$ (columns of $U_K$) and
+coefficients $\lambda_k^{(i)} = [\Sigma_K V_K^\top]_{ki}$; the
+approximation
 \begin{equation}
-  \hat{s}^{(i)}(x,t)
-  = \sum_{k=1}^{K} \lambda_k^{(i)}\,\phi_k(x,t)
+  \hat{s}^{(i)} = \bar{s} + \sum_{k=1}^{K} \lambda_k^{(i)}\,\phi_k
   \label{eq:pod_approx}
 \end{equation}
-is optimal in the $L^2$ sense among all rank-$K$ linear representations.
-The basis does not depend on $\kappa$: a single set of directions must
-represent solutions across the entire parameter space $\mathcal{K}$.
+is optimal in the $L^2$ sense among all rank-$K$ affine representations.
+
+For TEMPO(POD), the M-step~\eqref{eq:mstep_phi} is solved analytically.
+Given responsibilities $\{\gamma_{im}\}$, replace $\bar{s}$ with the
+weighted mean $\bar{s}_m = \sum_i \gamma_{im} s^{(i)}$ and apply SVD to
+the weighted centered matrix with columns
+$\sqrt{\gamma_{im}}\,(s^{(i)}-\bar{s}_m)$.
+This is the closed-form linear analogue of
+Algorithm~\ref{alg:npod}.
 
 \subsubsection{NeuralPOD Basis}\label{sec:neuralpod_basis}
 
-To overcome the linearity constraint, we parametrize each basis
-function as an MLP $\phi_k : \Omega \times \mathcal{T} \to \mathbb{R}$
-and learn scalar coefficients $\{\lambda_k^{(i)}\}$ jointly by
-\emph{greedy residual minimization}~\cite{Mou2026}.
-Let $r^{(0),i} = s^{(i)} - \phi_0$, where $\phi_0$ is a learned mean
-network.
+To overcome the linearity constraint, we parametrize each mode
+function $\phi_k : \Omega{\times}\mathcal{T} \to \mathbb{R}$ as a
+\emph{Fourier feature network}~\cite{Tancik2020}:
+\begin{equation}
+  \phi_k(y) \;=\; f_{\theta_k}\!\bigl(\psi(y)\bigr),
+  \qquad
+  \psi(y) \;=\;
+  \bigl[\sin(2\pi By),\;\cos(2\pi By)\bigr],
+  \label{eq:ffn}
+\end{equation}
+where $B \in \mathbb{R}^{F \times d}$ is a fixed random matrix drawn
+once at initialization and $f_{\theta_k} : \mathbb{R}^{2F} \to \mathbb{R}$
+is a small MLP with Tanh activations.
+Plain MLPs exhibit spectral bias~\cite{Rahaman2019} and cannot capture
+high-frequency features such as shock fronts; the Fourier encoding
+resolves this.
+For multi-scale coverage, the rows of $B$ are partitioned evenly across
+$L$ scales $s_1 < \cdots < s_L$: the $\ell$-th block is drawn from
+$\mathcal{N}(0,\,s_\ell^2 I)$.
+The mean field $\phi_0$ uses the same architecture.
+
+The scalar amplitudes $\lambda_k^{(i)} \in \mathbb{R}$ are direct
+learnable parameters, one per training trajectory, optimized jointly
+with $\phi_k$.
+After Phase~1 they are frozen and serve as regression targets for the
+BranchNet in Phase~2.
+
+Modes are learned by \emph{greedy residual minimization}~\cite{Mou2026}.
+Let $r^{(0,i)} = s^{(i)} - \phi_0$, where $\phi_0$ is fitted to the snapshot mean $\bar{s}$ defined above.
 For each subsequent mode $k \ge 1$, given the residual
 \begin{equation}
-  r^{(k-1),i}(x,t)
-  = s^{(i)}(x,t)
-  - \phi_0(x,t)
-  - \sum_{j=1}^{k-1}\phi_j(x,t)\,\lambda_j^{(i)},
+  r^{(k-1,i)}(y)
+  = s^{(i)}(y)
+  - \phi_0(y)
+  - \sum_{j=1}^{k-1}\lambda_j^{(i)}\,\phi_j(y),
   \label{eq:residual_global}
 \end{equation}
 we solve
 \begin{equation}
   \min_{\phi_k,\,\{\lambda_k^{(i)}\}}
-  \frac{1}{N}\sum_{i=1}^{N}
-  \bigl\|r^{(k-1),i} - \phi_k\cdot\lambda_k^{(i)}\bigr\|^2.
+  \sum_{i=1}^{N} \sum_j w_j
+  \Bigl(\lambda_k^{(i)}\,\phi_k(y_j) - r_j^{(k-1,i)}\Bigr)^{\!2}
   \label{eq:neuralpod_loss}
 \end{equation}
-Mode addition continues until the mean residual norm falls below
-$\mathrm{Tol}$ or $k = K_{\max}$.
-This procedure is the nonlinear analogue of Gram--Schmidt
-orthogonalization in function space: each mode extracts the largest
-component of the variance unexplained by the previous modes, without
-constraining those components to lie in a fixed linear subspace.
+(the global case with uniform weights; the $\gamma$-weighted
+generalisation used in TEMPO is Algorithm~\ref{alg:npod}).
+Mode addition stops when the residual falls below fraction $\tau$ of
+the initial variance,
+\begin{equation}
+  \sum_{i=1}^N \|r^{(k,i)}\|_w^2
+  \;<\;
+  \tau \cdot \sum_{i=1}^N \|s^{(i)} - \bar{s}\|_w^2,
+  \label{eq:npod_tol}
+\end{equation}
+or $k = K_{\max}$.
+Each mode captures the largest remaining component of variance without
+constraining the modes to a fixed linear subspace, making this the
+nonlinear analogue of Gram--Schmidt orthogonalization in the sense of
+sequential variance extraction.
 
 \subsection{Single-Regime Operators}\label{sec:single}
 
@@ -422,7 +459,7 @@ Under regime $m$, the approximation follows~\eqref{eq:separable}:
   + \sum_{p=1}^{P_m}
     \lambda_p^{(m,i)}\,\phi_p^{(m)}(y),
   \qquad y\in\Omega\times\mathcal{T}.
-  \label{eq:neuralpod_regime}
+  \label{eq:regime_approx}
 \end{equation}
 Each trajectory $s^{(i)}\in\mathbb{R}^{N_y}$ is treated as a single data point on
 the product grid $\{y_j=(x_j,t_j)\}$, so the temporal structure is encoded in the
@@ -439,9 +476,20 @@ $\alpha^{(i)} \in \mathbb{R}^P$.
 Running a standard GMM on $\{\alpha^{(i)}\}$ yields initial
 responsibilities $\gamma_{im}^{(0)}$, weights $\pi_m^{(0)}$,
 and per-regime statistics $(\mu_m^{(0)}, \Sigma_m^{(0)})$.
-Each regime basis $\Phi_m^{(0)}$ is initialized by
-\textsc{WeightedNeuralPOD} (Algorithm~\ref{alg:npod}) with weights
-$\{\gamma_{im}^{(0)}\}$.
+Each regime basis $\Phi_m^{(0)}$ is then fitted to the
+responsibility-weighted ensemble: for TEMPO(NeuralPOD) via
+\textsc{WeightedNeuralPOD} (Algorithm~\ref{alg:npod}); for TEMPO(POD)
+via the weighted SVD of Section~\ref{sec:bases}.
+The noise level $\sigma^2$ is calibrated from the initial
+reconstructions rather than treated as a free hyperparameter:
+\begin{equation}
+  \sigma^2 \;\leftarrow\;
+  \frac{1}{2N}\sum_{i=1}^N\sum_{m=1}^M
+  \gamma_{im}^{(0)}\,\bigl\|s^{(i)} - \hat{s}_m^{(i)}\bigr\|_w^2,
+  \label{eq:sigma2_calib}
+\end{equation}
+which ties the softness of the E-step directly to the quality of the
+initial bases.
 
 \paragraph{E-step.}
 At iteration $q$, the posterior regime responsibility for trajectory $i$
@@ -451,21 +499,34 @@ of Definition~\ref{def:generative}:
   \gamma_{im}^{(q)}
   = \frac{
     \pi_m^{(q-1)}\,
-    \exp\!\Bigl(-\dfrac{\|s^{(i)}-\hat{s}_m^{(i)}\|^2}{2\sigma^2}\Bigr)
+    \exp\!\Bigl(-\dfrac{\|s^{(i)}-\hat{s}_m^{(i)}\|_w^2}{2\sigma^2}\Bigr)
   }{
     \sum_{j=1}^{M}
     \pi_j^{(q-1)}\,
-    \exp\!\Bigl(-\dfrac{\|s^{(i)}-\hat{s}_j^{(i)}\|^2}{2\sigma^2}\Bigr)
+    \exp\!\Bigl(-\dfrac{\|s^{(i)}-\hat{s}_j^{(i)}\|_w^2}{2\sigma^2}\Bigr)
   },
   \label{eq:estep}
 \end{equation}
-where $\hat{s}_m^{(i)}$ is evaluated via~\eqref{eq:neuralpod_regime}
+where $\hat{s}_m^{(i)}$ is evaluated via~\eqref{eq:regime_approx}
 using $\Phi_m^{(q-1)}$ and $\Lambda_m^{(q-1)}$.
-Crucially, as the NeuralPOD bases improve in the M-step, the
-reconstructions $\hat{s}_m^{(i)}$ sharpen, and the E-step
+Crucially, as the bases improve in the M-step, the
+reconstructions $\hat{s}_m^{(i)}$ sharpen and the E-step
 automatically refines the regime assignments in response.
 This coupling distinguishes TEMPO from a GMM applied to a fixed
 feature space.
+
+\begin{remark}[Heteroscedastic extension]
+When $\kappa$ drives order-of-magnitude variation in solution amplitude,
+the homoscedastic likelihood~\eqref{eq:likelihood} is poorly calibrated:
+regimes with larger solutions dominate the E-step.
+Replacing the absolute error $\|s^{(i)}-\hat{s}_m^{(i)}\|_w^2$ with the
+relative error $\|s^{(i)}-\hat{s}_m^{(i)}\|_w^2\,/\,\|s^{(i)}\|_w^2$
+in both the E-step and $\sigma^2$ calibration yields a scale-invariant model.
+When $\kappa$ is observed, the GMM initialization can be replaced by soft
+assignments in $\log\kappa$ space; an optional $\kappa$-prior term
+(weighted by $\lambda \ge 0$) in the E-step anchors regime assignments
+to known parameter structure throughout EM.
+\end{remark}
 
 \paragraph{M-step.}
 Maximizing the expected complete-data log-likelihood with
@@ -479,12 +540,14 @@ weights,
 and a weighted reconstruction problem for each basis:
 \begin{equation}
   \min_{\Phi_m,\,\Lambda_m}
-  \sum_{i=1}^{N} \gamma_{im}^{(q)}\,\|s^{(i)} - \hat{s}_m^{(i)}\|^2,
+  \sum_{i=1}^{N} \gamma_{im}^{(q)}\,\|s^{(i)} - \hat{s}_m^{(i)}\|_w^2,
   \label{eq:mstep_phi}
 \end{equation}
-solved via \textsc{WeightedNeuralPOD} (Algorithm~\ref{alg:npod}).
-Because this subproblem is minimized by gradient descent rather than
-to global optimality, TEMPO is a Generalized EM
+solved by weighted SVD for TEMPO(POD) or
+\textsc{WeightedNeuralPOD} (Algorithm~\ref{alg:npod}) for
+TEMPO(NeuralPOD).
+Because the NeuralPOD subproblem is minimized by gradient descent
+rather than to global optimality, TEMPO is a Generalized EM
 algorithm~\cite{Neal1998}: it guarantees monotone non-decrease of the
 observed-data log-likelihood at every iteration under the
 sufficient condition that each M-step does not decrease the
@@ -550,7 +613,7 @@ $\Delta_m^{(q)} \ge \varepsilon_l$
 \noindent
 In the \textsc{Incremental} case, we compute the residual of the
 current basis under the updated responsibilities $\gamma^{(q)}$, add
-a new mode if $\|r_m^{(P_m)}\|_{\gamma_m^{(q)}}^2 \ge \mathrm{Tol}_m$,
+a new mode if $\sum_i \gamma_{im}^{(q)}\|r_m^{(P_m,i)}\|_w^2 \ge \tau\cdot\sum_i \gamma_{im}^{(q)}\|s^{(i)}-\bar{s}_m\|_w^2$,
 and prune the last mode if its weighted contribution falls below
 $\varepsilon_p$.
 The \textsc{Full rerun} case uses a cold-start random initialization.
@@ -570,7 +633,7 @@ see Table~\ref{tab:regime_selection}.
 \begin{algorithm}[t]
 \caption{\textsc{WeightedNeuralPOD}$\bigl(
   \{s^{(i)}, \gamma_{im}\}_{i=1}^N,\;
-  \mathrm{Tol}_m\bigr)$}
+  \tau\bigr)$}
 \label{alg:npod}
 \begin{algorithmic}[1]
 \State $\bar{s}^{(m)} \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,s^{(i)}$
@@ -579,8 +642,10 @@ see Table~\ref{tab:regime_selection}.
   $\displaystyle\sum_j w_j\bigl(\phi_0^{(m)}(y_j) - \bar{s}^{(m)}_j\bigr)^2$
 \State $r^{(0,i)} \leftarrow s^{(i)} - \phi_0^{(m)}(y)$
   \enspace for all $i$;\enspace $p \leftarrow 0$
+\State $V_m \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,\|s^{(i)}-\bar{s}^{(m)}\|_w^2$
+  \hfill\Comment{initial unmodeled variance}
 \While{$\displaystyle\sum_{i=1}^N \gamma_{im}\,\|r^{(p,i)}\|_w^2
-  \;\ge\; \mathrm{Tol}_m$ \textbf{ and } $p < P_{\max}$}
+  \;\ge\; \tau\, V_m$ \textbf{ and } $p < P_{\max}$}
   \State Jointly minimize over $\phi_{p+1}^{(m)}$ and
     $\{\lambda_{p+1}^{(m,i)}\}_{i=1}^N$:
     \[
@@ -604,8 +669,7 @@ see Table~\ref{tab:regime_selection}.
 \label{alg:tempo}
 \begin{algorithmic}[1]
 \Require $\mathcal{D} = \{u_0^{(i)}, \kappa^{(i)}, s^{(i)}\}_{i=1}^N$;\;
-  $M,\;\sigma^2,\;\varepsilon_s,\;\varepsilon_l,\;\varepsilon_p,\;
-  \varepsilon_c,\;\{\mathrm{Tol}_m\}_{m=1}^M$
+  $M,\;\varepsilon_s,\;\varepsilon_l,\;\varepsilon_p,\;\varepsilon_c,\;\tau$
 \Ensure Regime bases $\{\Phi_m^*\}$,\;
   amplitudes $\{\Lambda_m^*\}$,\;
   responsibilities $\{\gamma_{im}^*\}$,\;
@@ -619,14 +683,18 @@ see Table~\ref{tab:regime_selection}.
 \For{$m = 1,\ldots,M$}
   \State $\Phi_m^{(0)},\,\Lambda_m^{(0)} \leftarrow$
     \Call{WeightedNeuralPOD}
-    {$\{s^{(i)},\gamma_{im}^{(0)}\},\,\mathrm{Tol}_m$}
+    {$\{s^{(i)},\gamma_{im}^{(0)}\},\,\tau$}
+    \hfill\Comment{or weighted SVD for TEMPO(POD), see \S\ref{sec:bases}}
 \EndFor
+\State $\sigma^2 \leftarrow (2N)^{-1}\!\sum_{i,m}
+  \gamma_{im}^{(0)}\,\|s^{(i)}{-}\hat{s}_m^{(i)}\|_w^2$
+  \hfill\eqref{eq:sigma2_calib}
 %
 \Statex \textit{EM iterations}
 \Repeat
   \Statex \quad\textit{E-step}
   \For{all $i = 1,\ldots,N$ and $m = 1,\ldots,M$}
-    \State Compute $\hat{s}_m^{(i)}$ via~\eqref{eq:neuralpod_regime}
+    \State Compute $\hat{s}_m^{(i)}$ via~\eqref{eq:regime_approx}
       using $\Phi_m^{(q-1)}$ and $\Lambda_m^{(q-1)}$
     \State $\gamma_{im}^{(q)} \leftarrow$ Eq.~\eqref{eq:estep}
   \EndFor
@@ -643,8 +711,9 @@ see Table~\ref{tab:regime_selection}.
         \hfill \textsc{Skip}
     \ElsIf{$\Delta_m^{(q)} < \varepsilon_l$}
       \hfill \textsc{Incremental}
-      \State Compute $r_m^{(P_m)}$ under updated $\gamma^{(q)}$
-      \If{$\|r_m^{(P_m)}\|_{\gamma_m^{(q)}}^2 \ge \mathrm{Tol}_m$}
+      \State Compute $r_m^{(P_m)}$ under updated $\gamma^{(q)}$;\;
+        $V_m^{(q)} \leftarrow \sum_i\gamma_{im}^{(q)}\|s^{(i)}{-}\bar{s}_m^{(q)}\|_w^2$
+      \If{$\sum_i\gamma_{im}^{(q)}\|r_m^{(P_m,i)}\|_w^2 \ge \tau\cdot V_m^{(q)}$}
         \State Train mode $P_m{+}1$;\; $P_m \leftarrow P_m + 1$
       \EndIf
       \If{$\|\phi_{P_m}^{(m)}\|_w^2\cdot\displaystyle\sum_{i=1}^N
@@ -655,7 +724,7 @@ see Table~\ref{tab:regime_selection}.
       \hfill \textsc{Full rerun}
       \State $\Phi_m^{(q)},\,\Lambda_m^{(q)} \leftarrow$
         \Call{WeightedNeuralPOD}
-        {$\{s^{(i)},\gamma_{im}^{(q)}\},\,\mathrm{Tol}_m$}
+        {$\{s^{(i)},\gamma_{im}^{(q)}\},\,\tau$}
     \EndIf
   \EndFor
 \Until{$\max_m \Delta_m^{(q)} < \varepsilon_c$}
@@ -670,7 +739,7 @@ see Table~\ref{tab:regime_selection}.
 \subsection{TEMPO: Online Gated Operator}\label{sec:online}
 
 
-After Algorithm~\ref{alg:tempo} converges, all NeuralPOD bases
+After Algorithm~\ref{alg:tempo} converges, all regime bases
 $\{\Phi_m^*\}$ and responsibilities $\{\gamma_{im}^*\}$ are frozen.
 The online phase trains a \textbf{GatingNet}
 $\mathcal{W}: \mathbb{R}^{m_s + d_\kappa} \to \Delta^{M-1}$
@@ -704,7 +773,7 @@ Writing $w_m^{(i)} = w_m(u_0^{(i)},\kappa^{(i)})$, the online loss is
   \mathcal{L}_{\mathrm{online}}
   = \underbrace{
       \frac{1}{N}\sum_{i=1}^{N}
-      \|s^{(i)} - \hat{s}(\cdot;\,u_0^{(i)},\kappa^{(i)})\|^2
+      \|s^{(i)} - \hat{s}(\cdot;\,u_0^{(i)},\kappa^{(i)})\|_w^2
     }_{\mathcal{L}_{\mathrm{data}}}
   +\;\lambda_{\mathrm{KL}}
     \underbrace{
@@ -761,22 +830,26 @@ We use the PDEBench benchmark~\cite{Takamoto2022} across three problems.
 \end{equation}
 with periodic boundary conditions and random initial conditions drawn from a
 fixed distribution.
-Viscosity $\nu\in\{0.001,\,0.01,\,0.1,\,1.0\}$ spans qualitatively distinct
+Viscosity $\nu\in\{0.001,\,0.1,\,1.0\}$ spans qualitatively distinct
 solution regimes: smooth diffusive profiles at $\nu{=}1.0$ and
 near-discontinuous shock structures at $\nu{=}0.001$.
 Each value provides $N{=}9{,}500$ trajectories discretised on $N_x{=}1{,}024$
-spatial points and $N_t{=}101$ time steps, yielding $38{,}000$ trajectories in total.
+spatial points and $N_t{=}201$ time steps, yielding $28{,}500$ trajectories in total.
 
 \textbf{2D Darcy flow.}
 \begin{equation}
-  -\nabla\cdot\bigl(a(x)\,\nabla u(x)\bigr) = f(x),
+  -\nabla\cdot\bigl(a(x)\,\nabla u(x)\bigr) = \beta,
   \qquad x\in(0,1)^2,
   \label{eq:darcy}
 \end{equation}
 with zero Dirichlet boundary conditions.
-% TODO: complete Darcy dataset description
-
-% TODO: 1D Advection dataset
+Here $a(x)$ is a spatially varying permeability field sampled from a
+random sum of Gaussians, and $\beta\in\{0.01,\,0.1,\,1.0,\,10.0,\,100.0\}$
+is the constant source term.
+Each value provides $N{=}8{,}000$ training and $1{,}000$ test samples
+discretised on a $128{\times}128$ uniform grid ($N_y{=}16{,}384$ spatial points),
+$40{,}000$ trajectories in total.
+The operator maps $a(x)$ to the pressure solution $u(x)$.
 
 \paragraph{Methods.}
 We compare five methods, all implemented and trained by us on the same data
@@ -832,7 +905,7 @@ linear single-regime basis can achieve.
 \paragraph{NeuralPOD.}
 The steep initial decay confirms that the Fourier NeuralPOD basis concentrates
 variance efficiently; subsequent modes capture incrementally finer solution
-structure until the residual falls below the stopping tolerance $\mathrm{Tol}$.
+structure until the relative residual~\eqref{eq:npod_tol} falls below $\tau$.
 Figure~\ref{fig:basis_rec} shows the learned spatial modes alongside
 representative reconstructions.
 Figure~\ref{fig:npod_phase1} shows the weighted residual norm as a function of
@@ -960,9 +1033,7 @@ $M$ & BIC & $H$ \\
 \end{table}
 
 \paragraph{Regime structure.}
-Figure~\ref{fig:tsne} shows a t-SNE projection of all $38{,}000$ Burgers'
-snapshots coloured by EM-GMM assignment.
-Figure~\ref{fig:umap_em} shows the corresponding UMAP embedding and the GMM
+Figure~\ref{fig:umap_em} shows the UMAP embedding and the GMM
 fit in POD coefficient space $(\alpha_1,\alpha_2)$.
 Crucially, the three discovered regimes do \emph{not} coincide with
 individual viscosity values: each manifold branch spans multiple~$\nu$,
@@ -974,13 +1045,6 @@ $\boldsymbol{\pi}{=}(0.429,\,0.336,\,0.235)$, indicating a balanced,
 non-degenerate partition.
 Regimes~1 and~2 have converged ($\Delta_m < 0.013$);
 regime~3 continues to adapt ($\Delta_3{=}0.310$) and EM is ongoing.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/NEW-t_sne.png}
-\caption{t-SNE projection of Burgers' snapshots}
-\label{fig:tsne}
-\end{figure}
 
 \begin{figure}[h]
 \centering
@@ -1012,30 +1076,37 @@ demonstrating the parameter-adaptivity of the regime-specific NeuralPOD basis.
 
 With bases and responsibilities frozen, GatingNet and BranchNets are trained
 by minimising~\eqref{eq:online_loss}.
-Table~\ref{tab:results} reports test-set accuracy for all five methods,
-averaged over $\nu\in\{0.001,\,0.01,\,0.1,\,1.0\}$.
+Table~\ref{tab:results} reports test-set relative $L^2$ errors.
 Figure~\ref{fig:reconstruct} shows a representative space--time prediction.
 
 \begin{table}[h]
 \centering
-\caption{Relative $L^2$ error on the 1D Burgers' test set per viscosity value.
-  Best result per column in \textbf{bold}.}
+\caption{Relative $L^2$ test error on 1D Burgers' (mean over 1000 trajectories per~$\nu$).
+  Each row of POD-DeepONet and NeuralPOD-DeepONet is a \emph{separate} model trained on
+  the indicated~$\nu$; diagonal entries are in-distribution, off-diagonal show
+  cross-$\nu$ generalization.
+  TEMPO trains a \emph{single} model on all three $\nu$ simultaneously.
+  \textbf{Bold} = best result in that test column.}
 \label{tab:results}
-\begin{tabular}{lcccccc}
+\small
+\begin{tabular}{llccc}
 \toprule
-Method
-  & $\nu{=}0.001$ & $\nu{=}0.01$ & $\nu{=}0.1$ & $\nu{=}1.0$ & Mean \\
+Method & Trained on & $\nu{=}0.001$ & $\nu{=}0.1$ & $\nu{=}1.0$ \\
 \midrule
-DeepONet~\cite{Lu2019}
-  & -- & -- & -- & -- & -- \\
-POD-DeepONet~\cite{Lu2022}
-  & -- & 0.2130 & -- & -- & -- \\
-NeuralPOD-DeepONet~\textit{(ours)}
-  & -- & -- & -- & 0.2444 & -- \\
-\textbf{TEMPO(POD)}~\textit{(ours)}
-  & -- & -- & -- & -- & -- \\
-\textbf{TEMPO(NeuralPOD)}~\textit{(ours)}
-  & -- & -- & -- & -- & -- \\
+\multirow{3}{*}{POD-DeepONet~\cite{Lu2022}}
+  & $\nu{=}0.001$ & \textbf{0.2727} & 0.2970 & 0.6390 \\
+  & $\nu{=}0.1$   & 0.3495 & \textbf{0.0480} & 0.3442 \\
+  & $\nu{=}1.0$   & 0.4606 & 0.2597 & \textbf{0.0252} \\
+\midrule
+\multirow{3}{*}{NeuralPOD-DeepONet~\textit{(ours)}}
+  & $\nu{=}0.001$ & 0.3915 & 0.2883 & 0.5351 \\
+  & $\nu{=}0.1$   & 0.4259 & 0.2291 & 0.3714 \\
+  & $\nu{=}1.0$   & 0.4828 & 0.3153 & 0.1830 \\
+\midrule
+\multirow{3}{*}{TEMPO(POD)~\textit{(ours)}}
+  & $M{=}2$, all & 0.3187 & \textbf{0.1498} & \textbf{0.1590} \\
+  & $M{=}3$, all & 0.3170 & 0.1677 & 0.1823 \\
+  & $M{=}4$, all & 0.3215 & 0.1612 & 0.1998 \\
 \bottomrule
 \end{tabular}
 \end{table}
