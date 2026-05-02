@@ -30,7 +30,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--nu",          type=float, required=True)
     p.add_argument("--run_name",    type=str,   default=None)
-    p.add_argument("--results_dir", type=str,   default=str(_PROJECT_ROOT / "TEMPO_results"))
+    p.add_argument("--results_dir", type=str,   default=str(_PROJECT_ROOT / "TEMPO_results" / "burgers"))
     p.add_argument("--all_nu",      type=float, nargs="+", default=[0.001, 0.01, 0.1, 1.0])
     p.add_argument("--n_train",     type=int,   default=9000)
     p.add_argument("--n_test",      type=int,   default=500)
@@ -38,7 +38,7 @@ def parse_args():
     p.add_argument("--hidden_dim",  type=int,   default=256)
     p.add_argument("--n_layers",    type=int,   default=4)
     p.add_argument("--sensor_stride", type=int, default=1)
-    p.add_argument("--n_epochs",    type=int,   default=5000)
+    p.add_argument("--n_epochs",    type=int,   default=1200)
     p.add_argument("--batch_size",  type=int,   default=1024)
     p.add_argument("--seed",        type=int,   default=39)
     p.add_argument("--n_viz",       type=int,   default=3)
@@ -86,9 +86,10 @@ def main():
     tensor_test  = raw[args.n_train:]
     del raw
 
-    s_traj   = torch.tensor(tensor_train.reshape(args.n_train, -1), dtype=torch.float32).to(DEVICE)
-    u0_train = torch.tensor(tensor_train[:, 0, :], dtype=torch.float32).to(DEVICE)
-    u0_test  = torch.tensor(tensor_test[:, 0, :],  dtype=torch.float32).to(DEVICE)
+    s_traj      = torch.tensor(tensor_train.reshape(args.n_train, -1), dtype=torch.float32).to(DEVICE)
+    u0_train    = torch.tensor(tensor_train[:, 0, :], dtype=torch.float32).to(DEVICE)
+    u0_test     = torch.tensor(tensor_test[:, 0, :],  dtype=torch.float32).to(DEVICE)
+    s_test_flat = torch.tensor(tensor_test.reshape(args.n_test, -1), dtype=torch.float32)
 
     m = len(range(0, Nx, args.sensor_stride))
 
@@ -130,7 +131,20 @@ def main():
     cfg     = PODDeepONetConfig(n_epochs=args.n_epochs, batch_size=args.batch_size,
                                 sensor_stride=args.sensor_stride)
     trainer = PODDeepONetTrainer(model, cfg)
-    trainer.train(u0_train)
+    history = trainer.train(u0_train, val_u0=u0_test, val_s=s_test_flat)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.semilogy(history, color=C0, lw=1.5, label="Train")
+    if trainer.val_history:
+        ve, vl = zip(*trainer.val_history)
+        ax.semilogy(ve, vl, color=C1, lw=1.5, ls="--", label="Val")
+        ax.legend(framealpha=0.7)
+    ax.set_xlabel("Epoch"); ax.set_ylabel("Coefficient MSE")
+    ax.set_title("Phase 2: branch network", fontweight="bold")
+    ax.grid(True, ls="--", alpha=0.25); ax.spines[["top", "right"]].set_visible(False)
+    plt.tight_layout()
+    plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
+    plt.close()
 
     # --- Evaluation ---
     def predict_batched(u0, batch_size=256):
@@ -275,6 +289,7 @@ def main():
         "run_name": RUN_NAME,
     }, os.path.join(RUN_DIR, "model.pt"))
 
+    metrics["hparams"] = vars(args)
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
 

@@ -32,12 +32,12 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--nu",              type=float, required=True)
     p.add_argument("--run_name",        type=str,   default=None)
-    p.add_argument("--results_dir",     type=str,   default=str(_PROJECT_ROOT / "TEMPO_results"))
+    p.add_argument("--results_dir",     type=str,   default=str(_PROJECT_ROOT / "TEMPO_results" / "burgers"))
     p.add_argument("--all_nu",          type=float, nargs="+", default=[0.001, 0.01, 0.1, 1.0])
     p.add_argument("--n_train",         type=int,   default=2500)
     p.add_argument("--n_test",          type=int,   default=500)
     # Fourier basis
-    p.add_argument("--max_modes",       type=int,   default=20)
+    p.add_argument("--max_modes",       type=int,   default=32)
     p.add_argument("--n_epochs_mean",   type=int,   default=800)
     p.add_argument("--n_epochs_mode",   type=int,   default=1200)
     p.add_argument("--hidden_dim_basis",type=int,   default=256)
@@ -46,14 +46,16 @@ def parse_args():
     p.add_argument("--n_layers_basis",  type=int,   default=3)
     # Branch network
     p.add_argument("--hidden_dim",      type=int,   default=256)
-    p.add_argument("--n_layers",        type=int,   default=5)
+    p.add_argument("--n_layers",        type=int,   default=4)
     p.add_argument("--sensor_stride",   type=int,   default=1)
     # Training
     p.add_argument("--n_epochs",        type=int,   default=80000)
-    p.add_argument("--batch_size",      type=int,   default=512)
+    p.add_argument("--batch_size",      type=int,   default=1024)
     # Misc
     p.add_argument("--seed",            type=int,   default=42)
     p.add_argument("--n_viz",           type=int,   default=3)
+    p.add_argument("--half_time",       action="store_true",
+                   help="Use only first half of time steps")
     return p.parse_args()
 
 
@@ -61,7 +63,8 @@ def main():
     args = parse_args()
 
     TRAIN_NU = args.nu
-    RUN_NAME = args.run_name or f"npod_deeponet_nu{TRAIN_NU}_v1"
+    _suffix  = "_half" if args.half_time else ""
+    RUN_NAME = args.run_name or f"npod_deeponet_nu{TRAIN_NU}{_suffix}_v1"
     RUN_DIR  = os.path.join(args.results_dir, RUN_NAME)
     os.makedirs(RUN_DIR, exist_ok=True)
 
@@ -93,15 +96,21 @@ def main():
 
     N_total, Nt, Nx = raw.shape
     t_np = t_np[:Nt]
+    if args.half_time:
+        Nt = Nt // 2
+        raw  = raw[:, :Nt, :]
+        t_np = t_np[:Nt]
+        print(f"half_time: using first {Nt} time steps")
     print(f"loaded: N={N_total}, Nt={Nt}, Nx={Nx}")
 
     tensor_train = raw[:args.n_train]
     tensor_test  = raw[args.n_train:]
     del raw
 
-    s_traj   = torch.tensor(tensor_train.reshape(args.n_train, -1), dtype=torch.float32)
-    u0_train = torch.tensor(tensor_train[:, 0, :], dtype=torch.float32).to(DEVICE)
-    u0_test  = torch.tensor(tensor_test[:, 0, :],  dtype=torch.float32).to(DEVICE)
+    s_traj      = torch.tensor(tensor_train.reshape(args.n_train, -1), dtype=torch.float32)
+    u0_train    = torch.tensor(tensor_train[:, 0, :], dtype=torch.float32).to(DEVICE)
+    u0_test     = torch.tensor(tensor_test[:, 0, :],  dtype=torch.float32).to(DEVICE)
+    s_test_flat = torch.tensor(tensor_test.reshape(args.n_test, -1), dtype=torch.float32)
 
     x_grid = torch.tensor(x_np, dtype=torch.float32)
     t_grid = torch.tensor(t_np, dtype=torch.float32)
@@ -161,12 +170,16 @@ def main():
     cfg     = NeuralPODDeepONetConfig(n_epochs=args.n_epochs, batch_size=args.batch_size,
                                       sensor_stride=args.sensor_stride)
     trainer = NeuralPODDeepONetTrainer(model, cfg)
-    history_branch = trainer.train(u0_train)
+    history_branch = trainer.train(u0_train, val_u0=u0_test, val_s=s_test_flat, x_flat=x_flat)
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.semilogy(history_branch, color=C0, lw=1.5)
+    ax.semilogy(history_branch, color=C0, lw=1.5, label="Train")
+    if trainer.val_history:
+        ve, vl = zip(*trainer.val_history)
+        ax.semilogy(ve, vl, color=C1, lw=1.5, ls="--", label="Val")
+        ax.legend(framealpha=0.7)
     ax.set_xlabel("Epoch"); ax.set_ylabel("Coefficient MSE")
-    ax.set_title("Phase 2: branch network training loss", fontweight="bold")
+    ax.set_title("Phase 2: branch network", fontweight="bold")
     ax.grid(True, ls="--", alpha=0.25); ax.spines[["top", "right"]].set_visible(False)
     plt.tight_layout()
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
@@ -185,24 +198,32 @@ def main():
     print(f"Test  | mean={err_test.mean():.4f}  median={np.median(err_test):.4f}  std={err_test.std():.4f}  p95={np.percentile(err_test, 95):.4f}")
 
     metrics = {
-        "run_name":     RUN_NAME,
-        "n_modes":      int(K),
-        "n_train":      args.n_train,
-        "n_test":       args.n_test,
-        "train_mean":   float(err_train.mean()),
-        "train_median": float(np.median(err_train)),
-        "train_std":    float(err_train.std()),
-        "test_mean":    float(err_test.mean()),
-        "test_median":  float(np.median(err_test)),
-        "test_std":     float(err_test.std()),
-        "test_p95":     float(np.percentile(err_test, 95)),
+        "run_name":        RUN_NAME,
+        "n_modes":         int(K),
+        "n_train":         args.n_train,
+        "n_test":          args.n_test,
+        "half_time":       args.half_time,
+        "Nt":              int(Nt),
+        "Nx":              int(Nx),
+        "train_mean":      float(err_train.mean()),
+        "train_median":    float(np.median(err_train)),
+        "train_std":       float(err_train.std()),
+        "test_mean":       float(err_test.mean()),
+        "test_median":     float(np.median(err_test)),
+        "test_std":        float(err_test.std()),
+        "test_p95":        float(np.percentile(err_test, 95)),
+        "residual_norms":  [float(v) for v in history_pod.residual_norms],
+        "mean_loss":       [float(v) for v in history_pod.mean_loss],
+        "mode_losses":     [[float(v) for v in ml] for ml in history_pod.mode_losses],
+        "branch_loss":     [float(v) for v in history_branch],
     }
 
     # --- Cross-nu generalization ---
-    DATA_DIR = pathlib.Path(os.path.expanduser("~/data/1D/Burgers/Train"))
     cross_nu_metrics = {}
     for nu in args.all_nu:
-        fpath = DATA_DIR / f"1D_Burgers_Sols_Nu{nu}.hdf5"
+        _local_nu  = _SCRIPT_DIR.parents[0] / "data" / f"Burgers_Nu{nu}.hdf5"
+        _server_nu = pathlib.Path(os.path.expanduser("~/data/1D/Burgers/Train")) / f"1D_Burgers_Sols_Nu{nu}.hdf5"
+        fpath = _local_nu if _local_nu.exists() else _server_nu
         if not fpath.exists():
             print(f"  nu={nu:.3f}: file not found, skipping")
             continue
@@ -210,6 +231,8 @@ def main():
             raw_nu = f["tensor"][-args.n_test:]
             if raw_nu.ndim == 4:
                 raw_nu = raw_nu[..., 0]
+        if args.half_time:
+            raw_nu = raw_nu[:, :Nt, :]
         u0_nu  = torch.tensor(raw_nu[:, 0, :], dtype=torch.float32).to(DEVICE)
         s_nu   = raw_nu.reshape(args.n_test, -1)
         pred_nu = trainer.predict(u0_nu, x_flat).cpu().numpy()
@@ -313,6 +336,7 @@ def main():
         "run_name": RUN_NAME,
     }, os.path.join(RUN_DIR, "model.pt"))
 
+    metrics["hparams"] = vars(args)
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
 

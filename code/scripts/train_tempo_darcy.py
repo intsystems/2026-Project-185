@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train TEMPO (offline EM + online gating) on multiple viscosity values."""
+"""Train TEMPO on 2D Darcy Flow across multiple beta values."""
 import argparse
 import json
 import os
@@ -20,7 +20,8 @@ from models.tempo import TEMPOTrainer, TEMPOConfig, pod_factory, fourier_pod_fac
 from models.pod import PODConfig
 from models.fourier_neural_pod import FourierNeuralPODConfig
 from models.tempo_online import build_tempo_online, TEMPOOnlineConfig, _num_modes
-from utils.datasets import load_stacked
+from utils.datasets import load_darcy_stacked, DATA_DIR
+from utils.plotting import plot_cross_param_bar, plot_reconstruction_xy
 
 
 def rel_l2_vec(true, pred):
@@ -32,18 +33,18 @@ def parse_args():
 
     # Run
     p.add_argument("--run_name",      type=str,   default=None)
-    p.add_argument("--results_dir",   type=str,   default=str(_PROJECT_ROOT / "TEMPO_results" / "burgers"))
+    p.add_argument("--results_dir",   type=str,   default=str(_PROJECT_ROOT / "TEMPO_results" / "darcy"))
 
     # Data
-    p.add_argument("--nu_values",     type=float, nargs="+", default=[0.001, 0.1, 1.0])
-    p.add_argument("--n_samples",     type=int,   default=5000)
-    p.add_argument("--n_test_per_nu", type=int,   default=1000)
-    p.add_argument("--data_dir",      type=str,
-                   default=os.path.expanduser("~/data/1D/Burgers/Train"))
+    p.add_argument("--beta_values",   type=float, nargs="+", default=[0.01, 0.1, 1.0, 10.0, 100.0])
+    p.add_argument("--n_samples",     type=int,   default=8000, help="Samples per beta value")
+    p.add_argument("--n_test_per_beta", type=int, default=1000)
+    p.add_argument("--data_dir",      type=str,   default=None,
+                   help="Override data directory (default: local data/ or ~/data/2D/DarcyFlow)")
 
     # EM (TEMPOConfig)
-    p.add_argument("--M",             type=int,   default=3,    help="Number of regimes")
-    p.add_argument("--P_global",      type=int,   default=25,   help="Global POD modes for GMM init")
+    p.add_argument("--M",             type=int,   default=3)
+    p.add_argument("--P_global",      type=int,   default=25)
     p.add_argument("--sigma2",        type=float, default=0.1)
     p.add_argument("--max_em_iters",  type=int,   default=30)
     p.add_argument("--eps_skip",      type=float, default=0.01)
@@ -51,37 +52,50 @@ def parse_args():
     p.add_argument("--eps_conv",      type=float, default=0.005)
 
     # Regime basis
-    p.add_argument("--basis_type",    type=str,   default="pod",
-                   choices=["pod", "fourier"],    help="Basis type per regime")
+    p.add_argument("--basis_type",    type=str,   default="pod", choices=["pod", "fourier"])
     p.add_argument("--basis_max_modes", type=int, default=32,
                    help="Max modes per regime. Overridden by --total_modes if set.")
     p.add_argument("--total_modes",   type=int,   default=None,
                    help="If set, basis_max_modes = total_modes // M (fair comparison)")
-    # Fourier basis extra args (used only when basis_type=fourier)
     p.add_argument("--n_epochs_mean",        type=int,   default=165)
     p.add_argument("--n_epochs_mode",        type=int,   default=50)
     p.add_argument("--fourier_epoch_subset", type=float, default=None,
                    help="Fraction of N to use per mode epoch. Default: 1/M")
 
-    # Online phase (TEMPOOnlineConfig)
+    # Online phase
     p.add_argument("--online_lr",         type=float, default=3e-4)
     p.add_argument("--online_epochs",     type=int,   default=400)
     p.add_argument("--online_batch",      type=int,   default=16)
     p.add_argument("--online_hidden_dim", type=int,   default=128)
     p.add_argument("--online_n_layers",   type=int,   default=4)
-    p.add_argument("--sensor_stride",     type=int,   default=2)
+    p.add_argument("--sensor_stride",     type=int,   default=4)
     p.add_argument("--lambda_kl",         type=float, default=0.1)
     p.add_argument("--lambda_ent",        type=float, default=0.1)
     p.add_argument("--log_every",         type=int,   default=20)
 
+    # EM init
+    p.add_argument("--kappa_init",         action="store_true", default=False,
+                   help="Init regimes from log(beta) spacing instead of GMM on alpha")
+    p.add_argument("--kappa_prior_weight", type=float, default=1.0,
+                   help="Weight lambda of beta-prior term in E-step (only with --kappa_init)")
+    p.add_argument("--kappa_init_noise",   type=float, default=0.05,
+                   help="Uniform noise on initial gamma to ensure EM runs real iterations")
+
     # Misc
     p.add_argument("--seed",          type=int,   default=42)
-    p.add_argument("--n_viz",         type=int,   default=3)
-    p.add_argument("--n_umap",        type=int,   default=5000)
-    p.add_argument("--skip_umap",     action="store_true",
-                   help="Skip UMAP visualization (faster, no umap-learn needed)")
+    p.add_argument("--n_viz",         type=int,   default=1, help="Examples per beta in reconstruct plot")
+    p.add_argument("--skip_umap",     action="store_true", default=False)
 
     return p.parse_args()
+
+
+def _data_path(beta: float, data_dir: str = None) -> str:
+    filename = f"2D_DarcyFlow_beta{beta}_Train.hdf5"
+    if data_dir:
+        return os.path.join(data_dir, filename)
+    local  = pathlib.Path(DATA_DIR) / filename
+    server = pathlib.Path(os.path.expanduser("~/data/2D/DarcyFlow")) / filename
+    return str(local) if local.exists() else str(server)
 
 
 def main():
@@ -91,8 +105,7 @@ def main():
         args.basis_max_modes = max(1, args.total_modes // args.M)
         print(f"fair mode: total_modes={args.total_modes}, basis_max_modes={args.basis_max_modes} per regime")
 
-    nu_tag = "_".join(str(nu) for nu in args.nu_values)
-    RUN_NAME = args.run_name or f"tempo_{args.basis_type}_M{args.M}_v1"
+    RUN_NAME = args.run_name or f"tempo_{args.basis_type}_darcy_M{args.M}_v1"
     RUN_DIR  = os.path.join(args.results_dir, RUN_NAME)
     os.makedirs(RUN_DIR, exist_ok=True)
 
@@ -109,26 +122,34 @@ def main():
 
     REGIME_COLORS = [plt.cm.tab10(i) for i in range(10)]
     regime_colors = REGIME_COLORS[:args.M]
-    NU_CMAP = plt.cm.plasma
 
     # --- Data loading ---
-    entries = [
-        (nu, os.path.join(args.data_dir, f"1D_Burgers_Sols_Nu{nu}.hdf5"))
-        for nu in args.nu_values
-    ]
-    s_np, kappa_np, x_np, t_np, Nx, Nt = load_stacked(entries, n_samples=args.n_samples)
-    Ny = Nt * Nx
+    entries = []
+    for beta in args.beta_values:
+        fpath = _data_path(beta, args.data_dir)
+        if not os.path.exists(fpath):
+            print(f"  beta={beta}: file not found, skipping")
+            continue
+        entries.append((beta, fpath))
 
-    x_grid = torch.tensor(x_np, dtype=torch.float32)
-    t_grid = torch.tensor(t_np, dtype=torch.float32)
-    tt, xx = torch.meshgrid(t_grid, x_grid, indexing="ij")
-    x_flat = torch.stack([xx.flatten(), tt.flatten()], dim=1)
+    if not entries:
+        raise RuntimeError("No data files found. Check --data_dir or download the data.")
 
-    s     = torch.from_numpy(s_np);           del s_np
+    beta_loaded = [e[0] for e in entries]
+    s_np, a_np, kappa_np, xy_np, Nx, Ny = load_darcy_stacked(entries, n_samples=args.n_samples)
+    Nxy = Nx * Ny
+
+    x_np_1d = xy_np[::Ny, 0]
+    y_np_1d = xy_np[:Ny, 1]
+
+    x_flat = torch.tensor(xy_np, dtype=torch.float32)   # (Nxy, 2) — stays CPU for EM
+    x_dev  = x_flat.to(DEVICE)
+
+    s     = torch.from_numpy(s_np);              del s_np
+    a     = torch.from_numpy(a_np);              del a_np
     kappa = torch.from_numpy(kappa_np[:, None]); del kappa_np
-    x     = x_flat.to(DEVICE)
 
-    print(f"s={s.shape}, x={x.shape}, kappa={kappa.shape}")
+    print(f"s={s.shape}, a={a.shape}, kappa={kappa.shape}")
 
     # --- Phase 1: TEMPO EM ---
     print("=== Phase 1: TEMPO EM ===")
@@ -154,26 +175,26 @@ def main():
         eps_skip=args.eps_skip,
         eps_large=args.eps_large,
         eps_conv=args.eps_conv,
+        kappa_init=args.kappa_init,
+        kappa_prior_weight=args.kappa_prior_weight,
+        kappa_init_noise=args.kappa_init_noise,
         basis_config=basis_cfg,
         basis_factory=basis_factory,
     )
 
     trainer = TEMPOTrainer(cfg)
-    trainer.train(s, x, t=None, kappa=kappa)
+    trainer.train(s, x_dev, t=None, kappa=kappa)
 
     # EM convergence plot
     log = trainer.history_phase1
     if log:
         fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-
         axes[0].plot(log["iter"], log["ll"], "o-", color=plt.cm.tab10(0), lw=1.5, markersize=4)
         axes[0].set_xlabel("EM iteration"); axes[0].set_ylabel("Log-likelihood")
         axes[0].set_title("EM: log-likelihood", fontweight="bold")
-
         axes[1].plot(log["iter"], log["entropy"], "o-", color=plt.cm.tab10(1), lw=1.5, markersize=4)
         axes[1].set_xlabel("EM iteration"); axes[1].set_ylabel("Entropy")
         axes[1].set_title("EM: assignment entropy", fontweight="bold")
-
         for m in range(args.M):
             delta_m = [d[m] for d in log["delta"]]
             axes[2].plot(log["iter"], delta_m, "o-", color=regime_colors[m],
@@ -182,7 +203,6 @@ def main():
         axes[2].set_xlabel("EM iteration"); axes[2].set_ylabel("Delta")
         axes[2].set_title("EM: distribution shift per regime", fontweight="bold")
         axes[2].legend(fontsize=8, framealpha=0.7)
-
         for ax in axes:
             ax.grid(True, ls="--", alpha=0.25)
             ax.spines[["top", "right"]].set_visible(False)
@@ -195,7 +215,7 @@ def main():
         try:
             from utils.plotting import plot_umap_regimes
             rng_umap = np.random.default_rng(args.seed)
-            idx_umap = rng_umap.choice(len(s), min(args.n_umap, len(s)), replace=False)
+            idx_umap = rng_umap.choice(len(s), min(5000, len(s)), replace=False)
             plot_umap_regimes(
                 alpha=trainer.alpha[idx_umap].cpu().numpy(),
                 mu=trainer.mu.cpu().numpy(),
@@ -203,8 +223,8 @@ def main():
                 hard_labels=trainer.gamma[idx_umap].argmax(dim=1).cpu().numpy(),
                 param_vals=kappa[idx_umap, 0].cpu().numpy(),
                 regime_colors=regime_colors,
-                param_label="nu",
-                title="Burgers trajectories - TEMPO EM regime structure",
+                param_label=r"$\beta$",
+                title="Darcy Flow - TEMPO regimes",
                 save_path=os.path.join(RUN_DIR, "TEMPO_phase1.png"),
                 seed=args.seed,
             )
@@ -216,20 +236,18 @@ def main():
     # --- Phase 2: Online gated operator ---
     print("=== Phase 2: Online gated operator ===")
 
-    N_per_nu  = args.n_samples
-    nu_list   = args.nu_values
+    N_per_beta = args.n_samples
     train_idx = torch.cat([
-        torch.arange(i * N_per_nu, (i + 1) * N_per_nu - args.n_test_per_nu)
-        for i in range(len(nu_list))
+        torch.arange(i * N_per_beta, (i + 1) * N_per_beta - args.n_test_per_beta)
+        for i in range(len(beta_loaded))
     ])
     test_idx = torch.cat([
-        torch.arange((i + 1) * N_per_nu - args.n_test_per_nu, (i + 1) * N_per_nu)
-        for i in range(len(nu_list))
+        torch.arange((i + 1) * N_per_beta - args.n_test_per_beta, (i + 1) * N_per_beta)
+        for i in range(len(beta_loaded))
     ])
 
-    u0 = s[:, :Nx]
     s_train     = s[train_idx];         s_test     = s[test_idx]
-    u0_train    = u0[train_idx];        u0_test    = u0[test_idx]
+    a_train     = a[train_idx];         a_test     = a[test_idx]
     kappa_train = kappa[train_idx];     kappa_test = kappa[test_idx]
     gamma_train = trainer.gamma[train_idx]
 
@@ -252,38 +270,34 @@ def main():
     model_online, online_trainer = build_tempo_online(
         trainers=trainer.trainers,
         d_kappa=kappa.shape[1],
-        Nx=Nx,
+        Nx=Nxy,
         cfg=cfg_online,
     )
     model_online = model_online.to(DEVICE)
 
     history = online_trainer.train(
-        s=s_train, u0=u0_train, kappa=kappa_train,
-        x_flat=x, gamma_star=gamma_train,
+        s=s_train, u0=a_train, kappa=kappa_train,
+        x_flat=x_dev, gamma_star=gamma_train,
         trainers=trainer.trainers,
-        val_s=s_test, val_u0=u0_test, val_kappa=kappa_test,
+        val_s=s_test, val_u0=a_test, val_kappa=kappa_test,
     )
 
     # Training dynamics plot
     epochs = range(len(history["total"]))
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-    c0, c1 = plt.cm.tab10(0), plt.cm.tab10(1)
-
-    axes[0].plot(epochs, history["total"], color=c0, label="total", lw=2)
-    axes[0].plot(epochs, history["data"],  color=c1, label="data",  lw=1.5, ls="--")
+    axes[0].plot(epochs, history["total"], color=plt.cm.tab10(0), label="total", lw=2)
+    axes[0].plot(epochs, history["data"],  color=plt.cm.tab10(1), label="data",  lw=1.5, ls="--")
     if online_trainer.val_history:
         ve, vl = zip(*online_trainer.val_history)
         axes[0].plot(ve, vl, color=plt.cm.tab10(4), lw=1.5, ls=":", label="val data")
     axes[0].set_title("Phase 2: branch network", fontweight="bold")
     axes[0].set_xlabel("Epoch"); axes[0].set_ylabel("Loss")
     axes[0].legend(framealpha=0.7); axes[0].set_yscale("symlog")
-
     axes[1].plot(epochs, history["kl"],  color=plt.cm.tab10(2), label="KL",  lw=1.5)
     axes[1].plot(epochs, history["ent"], color=plt.cm.tab10(3), label="ent", lw=1.5, ls="--")
     axes[1].set_title("Regularisation terms", fontweight="bold")
     axes[1].set_xlabel("Epoch")
     axes[1].legend(framealpha=0.7)
-
     for ax in axes:
         ax.grid(True, ls="--", alpha=0.25)
         ax.spines[["top", "right"]].set_visible(False)
@@ -293,51 +307,48 @@ def main():
 
     # --- Evaluation ---
     s_pred, w_pred = online_trainer.predict(
-        u0_new=u0_test, kappa_new=kappa_test,
-        x_flat=x, trainers=trainer.trainers,
+        u0_new=a_test, kappa_new=kappa_test,
+        x_flat=x_dev, trainers=trainer.trainers,
     )
-    s_pred_np  = s_pred.cpu().numpy()
-    s_test_np  = s_test.numpy()
-    w_np       = w_pred.cpu().numpy()
-    kappa_t_np = kappa_test[:, 0].numpy()
-    nu_unique_t = np.unique(kappa_t_np)
+    s_pred_np   = s_pred.cpu().numpy()
+    s_test_np   = s_test.numpy()
+    w_np        = w_pred.cpu().numpy()
+    kappa_t_np  = kappa_test[:, 0].numpy()
+    beta_unique = np.unique(kappa_t_np)
 
     rel_l2 = rel_l2_vec(s_test_np, s_pred_np)
     print("Mean rel L2 error:")
-    for nu in nu_unique_t:
-        mask = kappa_t_np == nu
-        print(f"  nu={nu:.3f}: {rel_l2[mask].mean():.4f} +/- {rel_l2[mask].std():.4f}")
+    for beta in beta_unique:
+        mask = kappa_t_np == beta
+        print(f"  beta={beta}: {rel_l2[mask].mean():.4f} +/- {rel_l2[mask].std():.4f}")
 
-    # Gating + error plots
-    nu_to_col_t = {nu: NU_CMAP(i / max(len(nu_unique_t) - 1, 1))
-                   for i, nu in enumerate(nu_unique_t)}
-
+    # Gating weights plot
+    NU_CMAP = plt.cm.plasma
+    beta_to_col = {beta: NU_CMAP(i / max(len(beta_unique) - 1, 1))
+                   for i, beta in enumerate(beta_unique)}
     fig, axes = plt.subplots(1, 2, figsize=(14, 4))
-
-    x_pos = np.arange(len(nu_unique_t))
+    x_pos = np.arange(len(beta_unique))
     width = 0.8 / args.M
     for m in range(args.M):
-        w_m = [w_np[kappa_t_np == nu, m].mean() for nu in nu_unique_t]
+        w_m = [w_np[kappa_t_np == beta, m].mean() for beta in beta_unique]
         axes[0].bar(x_pos + m * width, w_m, width,
                     color=regime_colors[m], label=f"Regime {m+1}", alpha=0.85, linewidth=0)
     axes[0].set_xticks(x_pos + width * (args.M - 1) / 2)
-    axes[0].set_xticklabels([f"nu={nu:.3f}" for nu in nu_unique_t])
+    axes[0].set_xticklabels([f"$\\beta$={b:.4g}" for b in beta_unique])
     axes[0].set_ylabel("Mean gating weight")
-    axes[0].set_title("Gating weights per viscosity", fontweight="bold")
+    axes[0].set_title(r"Gating weights per $\beta$", fontweight="bold")
     axes[0].legend(fontsize=9, framealpha=0.7); axes[0].set_ylim(0, 1)
-
-    bp_data = [rel_l2[kappa_t_np == nu] for nu in nu_unique_t]
+    bp_data = [rel_l2[kappa_t_np == beta] for beta in beta_unique]
     bp = axes[1].boxplot(bp_data, patch_artist=True, widths=0.45,
                          medianprops=dict(color="black", lw=1.5),
                          whiskerprops=dict(lw=1.2), capprops=dict(lw=1.2),
                          flierprops=dict(marker="o", markersize=3, alpha=0.4, linestyle="none"))
-    for patch, nu in zip(bp["boxes"], nu_unique_t):
-        patch.set_facecolor(nu_to_col_t[nu]); patch.set_alpha(0.8); patch.set_linewidth(0)
-    axes[1].set_xticklabels([f"nu={nu:.3f}" for nu in nu_unique_t])
+    for patch, beta in zip(bp["boxes"], beta_unique):
+        patch.set_facecolor(beta_to_col[beta]); patch.set_alpha(0.8); patch.set_linewidth(0)
+    axes[1].set_xticklabels([f"$\\beta$={b:.4g}" for b in beta_unique])
     axes[1].set_ylabel("Relative L2 error")
-    axes[1].set_title("Reconstruction error by viscosity", fontweight="bold")
     axes[1].set_ylim(0, 1)
-
+    axes[1].set_title(r"Error by $\beta$", fontweight="bold")
     for ax in axes:
         ax.grid(True, ls="--", alpha=0.25, axis="y")
         ax.spines[["top", "right"]].set_visible(False)
@@ -347,33 +358,40 @@ def main():
     plt.close()
 
     # Reconstruction examples
-    fig, axes = plt.subplots(len(nu_unique_t), 3,
-                             figsize=(13, 3.5 * len(nu_unique_t)))
-    if len(nu_unique_t) == 1:
-        axes = axes[None, :]
-    for row, nu in enumerate(nu_unique_t):
-        idx_nu  = np.where(kappa_t_np == nu)[0][0]
-        s_true  = s_test_np[idx_nu].reshape(Nt, Nx)
-        s_hat   = s_pred_np[idx_nu].reshape(Nt, Nx)
-        err     = np.abs(s_true - s_hat)
-        vmin, vmax = s_true.min(), s_true.max()
-        kw = dict(aspect="auto", origin="lower",
-                  extent=[x_np.min(), x_np.max(), t_np.min(), t_np.max()])
-        axes[row, 0].imshow(s_true,  vmin=vmin, vmax=vmax, cmap="RdBu_r", **kw)
-        axes[row, 1].imshow(s_hat,   vmin=vmin, vmax=vmax, cmap="RdBu_r", **kw)
-        im = axes[row, 2].imshow(err, cmap="Oranges", **kw)
-        plt.colorbar(im, ax=axes[row, 2], fraction=0.046)
-        axes[row, 0].set_title(f"nu={nu:.3f} - ground truth")
-        axes[row, 1].set_title(f"nu={nu:.3f} - TEMPO")
-        axes[row, 2].set_title(f"nu={nu:.3f} - |error|")
-        for ax in axes[row]:
-            ax.set_xlabel("x"); ax.set_ylabel("t")
-            ax.spines[["top", "right"]].set_visible(False)
-    plt.suptitle(f"Space-time reconstructions - TEMPO({args.basis_type.upper()})",
-                 fontweight="bold", fontsize=13)
-    plt.tight_layout()
-    plt.savefig(os.path.join(RUN_DIR, "reconstruct.png"), dpi=150, bbox_inches="tight")
-    plt.close()
+    rng = np.random.default_rng(args.seed)
+    true_list, pred_list, rl2_list, row_labels = [], [], [], []
+    for beta in beta_unique:
+        idxs = np.where(kappa_t_np == beta)[0]
+        chosen = rng.choice(idxs, size=min(args.n_viz, len(idxs)), replace=False)
+        for idx in chosen:
+            t = s_test_np[idx].reshape(Nx, Ny)
+            p = s_pred_np[idx].reshape(Nx, Ny)
+            true_list.append(t)
+            pred_list.append(p)
+            rl2_list.append(float(np.linalg.norm(t - p) / np.linalg.norm(t)))
+            row_labels.append(f"$\\beta$={beta:.4g}")
+
+    plot_reconstruction_xy(
+        true_list, pred_list, rl2_list, x_np_1d, y_np_1d,
+        f"TEMPO({args.basis_type.upper()})", os.path.join(RUN_DIR, "reconstruct.png"),
+        row_labels=row_labels,
+    )
+
+    # Cross-beta bar chart
+    cross_beta_metrics = {}
+    for beta in beta_unique:
+        mask = kappa_t_np == beta
+        cross_beta_metrics[beta] = {
+            "mean":   float(rel_l2[mask].mean()),
+            "median": float(np.median(rel_l2[mask])),
+            "std":    float(rel_l2[mask].std()),
+            "p95":    float(np.percentile(rel_l2[mask], 95)),
+        }
+    plot_cross_param_bar(
+        cross_beta_metrics, None, r"$\beta$",
+        f"TEMPO({args.basis_type.upper()}) Darcy",
+        os.path.join(RUN_DIR, "cross_beta.png"),
+    )
 
     # --- Metrics ---
     metrics = {
@@ -385,11 +403,11 @@ def main():
         "overall_mean":   float(rel_l2.mean()),
         "overall_median": float(np.median(rel_l2)),
     }
-    for nu in nu_unique_t:
-        mask = kappa_t_np == nu
-        metrics[f"nu{nu:.3f}_mean"]   = float(rel_l2[mask].mean())
-        metrics[f"nu{nu:.3f}_median"] = float(np.median(rel_l2[mask]))
-        metrics[f"nu{nu:.3f}_std"]    = float(rel_l2[mask].std())
+    for beta in beta_unique:
+        mask = kappa_t_np == beta
+        metrics[f"beta{beta:.4g}_mean"]   = float(rel_l2[mask].mean())
+        metrics[f"beta{beta:.4g}_median"] = float(np.median(rel_l2[mask]))
+        metrics[f"beta{beta:.4g}_std"]    = float(rel_l2[mask].std())
 
     metrics["phase1_log"] = trainer.history_phase1
     metrics["phase2_log"] = history
