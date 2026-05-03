@@ -73,7 +73,7 @@
 \begin{abstract}
 Operator learning methods typically approximate the solution map of a physical system with a single global model — an assumption that fails when solutions change character fundamentally across the parameter space.
 
-We propose TEMPO: a framework that identifies latent dynamical regimes in snapshot data via Expectation-Maximization, builds a dedicated NeuralPOD basis for each, and learns to route new inputs to the right regime at inference time. On multi-regime benchmarks, TEMPO achieves substantially lower cross-regime errors than per-parameter specialists, with interpretable structure that reflects the underlying physics.
+We propose TEMPO: a framework that identifies latent dynamical regimes in snapshot data via Expectation-Maximization, builds a dedicated basis for each, and learns to route new inputs to the right regime at inference time. On multi-regime benchmarks, TEMPO achieves substantially lower cross-regime errors than per-parameter specialists, with interpretable structure that reflects the underlying physics.
 
 \end{abstract}
 
@@ -113,9 +113,8 @@ These methods use hard cluster assignments, operate offline on fixed datasets,
 and do not couple regime discovery with the operator learning objective —
 leaving basis quality and assignment accuracy disconnected.
 
-We propose \textbf{TEMPO} (\textit{Regime-Aware Operator Learning with
-Locally Adapted POD Bases}), which closes this gap in a principled
-probabilistic framework.
+We propose \textbf{TEMPO} (\textit{Trajectory EM Mixture of POD Operators}),
+which closes this gap in a principled probabilistic framework.
 TEMPO models the trajectory ensemble as a Gaussian mixture and recovers regime
 structure via Expectation-Maximization (EM): the E-step softly assigns each
 trajectory to regimes based on reconstruction quality, while the M-step
@@ -157,6 +156,16 @@ where $u_0^{(i)} \in \mathcal{U} = L^2(\Omega)$ is the initial condition and $\k
 Each trajectory $s^{(i)}$ is discretized on $N_y = N_t N_x$ quadrature points
 $\{y_j = (x_j, t_j),\, w_j\}_{j=1}^{N_y}$ covering the product grid
 $\Omega \times \mathcal{T}$, with weighted norm $\|f\|_w^2 = \sum_j w_j f(y_j)^2$.
+
+\begin{figure}[b]
+  \centering
+  \includegraphics[width=0.45\textwidth]{TEMPO/main/figs/regimes_fig.png}
+    \caption{Training dataset $\cD$: solution trajectories $s^{(i)}$ on
+$\Omega\times\mathcal{T}$ for different $\kappa^{(i)}\in\cK$. Solutions
+change character fundamentally across parameter values.}
+
+  \label{fig:dataset}
+\end{figure}
 
 \begin{definition}[Solution operator]
 \label{def:operator}
@@ -543,29 +552,11 @@ not just the volume of reassignments.
 Two trajectories with very different $\alpha^{(i)}$ swapping regimes
 produce a large $\Delta_m^{(q)}$ and trigger a basis update;
 two similar snapshots doing so do not.
-Given thresholds $0 < \varepsilon_s < \varepsilon_l$, the update
-decision at iteration $q$ follows a three-way rule:
-
-\begin{center}
-\renewcommand{\arraystretch}{1.3}\small
-\begin{tabular}{lll}
-\toprule
-Condition & Action & Rationale \\
-\midrule
-$\Delta_m^{(q)} < \varepsilon_s$
-  & \textsc{Skip}
-  & Data manifold unchanged; basis remains accurate \\
-$\varepsilon_s \le \Delta_m^{(q)} < \varepsilon_l$
-  & \textsc{Incremental}
-  & Moderate drift; add or prune one mode \\
-$\Delta_m^{(q)} \ge \varepsilon_l$
-  & \textsc{Full rerun}
-  & Large shift; rebuild from random initialization \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\noindent
+Given thresholds $0 < \varepsilon_s < \varepsilon_l$, regime $m$ is
+\textsc{Skip}ped if $\Delta_m^{(q)} < \varepsilon_s$, updated
+\textsc{Incremental}ly (add or prune one mode) if
+$\varepsilon_s \le \Delta_m^{(q)} < \varepsilon_l$, and fully retrained
+from scratch (\textsc{Full rerun}) otherwise.
 In the \textsc{Incremental} case, we compute the residual of the
 current basis under the updated responsibilities $\gamma^{(q)}$, add
 a new mode if $\sum_i \gamma_{im}^{(q)}\|r_m^{(K_m,i)}\|_w^2 \ge \tau\cdot\sum_i \gamma_{im}^{(q)}\|s^{(i)}-\bar{s}_m^{(q)}\|_w^2$,
@@ -578,7 +569,7 @@ as warm-starting may trap gradient descent in the geometry of the previous regim
 EM terminates when $\max_m \Delta_m^{(q)} < \varepsilon_c$.
 The number of regimes $M \in \{2,3,4\}$ is selected by BIC on the GMM fit,
 with mean assignment entropy as a secondary criterion;
-see Table~\ref{tab:regime_selection}.
+see Table~\ref{tab:regime_selection} (Appendix~\ref{app:exp}).
 The complete offline procedure is given in Algorithm~\ref{alg:tempo}.
 
 \subsection{TEMPO: Online Gated Operator}\label{sec:online}
@@ -809,7 +800,7 @@ Method & Train~$\beta$
 \multicolumn{7}{l}{\textit{Joint training ($\beta\in\{0.1,1,10,100\}$)}} \\[2pt]
 POD-DeepONet~\cite{Lu2022}
   & all
-  & \textemdash & \textemdash & \textemdash & \textemdash & \textemdash \\
+  & \textemdash & 2.557 & 0.363 & 0.181 & 0.347 \\
 TEMPO(POD)~\textit{(ours)}
   & $M{=}5$
   & \textemdash & \textbf{0.775} & \textbf{0.178} & \textbf{0.136} & \textbf{0.073} \\
@@ -826,82 +817,25 @@ TEMPO(NeuralPOD)~\textit{(ours)}
 %==========================================================================
 
 \paragraph{Number of regimes.}
-We sweep $M\in\{2,3,4\}$ and report three criteria in
-Table~\ref{tab:regime_selection}: the EM log-likelihood (BIC, higher is better),
-mean assignment entropy $H = -\frac{1}{N}\sum_{i,m}\gamma_{im}\log\gamma_{im}$,
-and overall test error~$\bar{\varepsilon}$.
-We select $M{=}3$ based on the entropy elbow: the gain from $M{=}2$ to $M{=}3$
-is $+0.30$, while the gain from $M{=}3$ to $M{=}4$ drops to $+0.18$,
-indicating that the third regime captures a genuine structure that a fourth
-does not.
+We select $M{=}3$ based on BIC and an entropy elbow: the mean assignment
+entropy $H$ gains $+0.30$ from $M{=}2$ to $M{=}3$ but only $+0.18$ from
+$M{=}3$ to $M{=}4$, indicating the third regime captures genuine structure
+that a fourth does not (Table~\ref{tab:regime_selection},
+Appendix~\ref{app:exp}).
 The UMAP embedding (Figure~\ref{fig:umap_em}) confirms three distinct manifold
 branches, one per discovered regime.
 
-% TABLE 3: Regime selection
-\begin{table}[h]
-\centering
-\small
-\setlength{\tabcolsep}{12pt}
-\caption{Regime count selection on 1D Burgers'.
-  BIC: EM log-likelihood (higher is better);
-  $H$: mean assignment entropy;
-  $\bar{\varepsilon}$: mean relative $L^2$ test error.}
-\label{tab:regime_selection}
-\begin{tabular}{c c c c}
-\toprule
-$M$ & BIC (${\times}10^{4}$) & $H$ & $\bar{\varepsilon}$ \\
-\midrule
-2          & 3.90 & 0.622 & 0.209 \\
-\textbf{3} & \textbf{4.92} & \textbf{0.920} & \textbf{0.222} \\
-4          & 5.47 & 1.099 & 0.228 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
 \paragraph{Gating structure.}
-Table~\ref{tab:gating} reports the mean EM assignment weight
-$\bar{\gamma}_m^\nu = |\mathcal{T}_\nu|^{-1}\sum_{i\in\mathcal{T}_\nu}\gamma_{im}^*$
-for each viscosity class, alongside the global mixture weights~$\pi_m$.
-The per-$\nu$ weights are nearly identical to~$\pi_m$ across all three regimes,
-meaning each viscosity class is split between regimes in almost exactly the
-same proportion as the full dataset.
-This confirms that regime membership is determined by the shape of the initial
-condition~$u_0$, not by the viscosity label~$\nu$ directly, consistent with
-the UMAP structure in Figure~\ref{fig:umap_em}.
-
-% TABLE 4: Gating weights
-\begin{table}[h]
-\centering
-\small
-\setlength{\tabcolsep}{14pt}
-\caption{Mean EM assignment weights per viscosity (1D Burgers',
-  TEMPO(POD), $M{=}3$) compared to global mixture weights~$\pi_m$.
-  Each data row sums to~$1$.
-  The per-$\nu$ weights closely match~$\pi_m$, confirming that regime
-  membership is driven by the shape of~$u_0$, not by~$\nu$.}
-\label{tab:gating}
-\begin{tabular}{c c c c}
-\toprule
-$\nu$ & Regime~1 & Regime~2 & Regime~3 \\
-\midrule
-0.001 & 0.32 & 0.28 & 0.40 \\
-0.1   & 0.32 & 0.26 & 0.42 \\
-1.0   & 0.33 & 0.26 & 0.41 \\
-\midrule
-$\pi_m$ & 0.32 & 0.27 & 0.41 \\
-\bottomrule
-\end{tabular}
-\end{table}
+The per-viscosity EM responsibilities closely match the global mixture
+weights $\boldsymbol{\pi}{=}(0.324,\,0.267,\,0.409)$ across all $\nu$
+(Table~\ref{tab:gating}, Appendix~\ref{app:exp}), confirming that regime
+membership is driven by the geometry of~$u_0$, not by~$\nu$.
 
 \paragraph{Regime structure.}
-Figure~\ref{fig:umap_em} shows the UMAP embedding of all training snapshots,
-coloured by regime assignment and by~$\nu$.
-The three discovered regimes do \emph{not} coincide with individual viscosity
-values: each manifold branch spans multiple~$\nu$, confirming that the EM
-partition reflects intrinsic solution geometry rather than the physical parameter label.
-After convergence, mixture weights are
-$\boldsymbol{\pi}{=}(0.324,\,0.267,\,0.409)$, yielding a balanced,
-non-degenerate partition.
+Figure~\ref{fig:umap_em} confirms regime structure in both the UMAP
+(\textit{left/centre}) and the POD coefficient space (\textit{right}):
+each manifold branch spans multiple~$\nu$, confirming the partition
+reflects solution geometry rather than the physical parameter directly.
 
 \begin{figure}[t]
 \centering
@@ -927,14 +861,6 @@ residuals and no systematic error near the diffusive front.
 Additional reconstructions and error distributions for all baselines are
 provided in Appendix~\ref{app:exp}.
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/reconstruct.png}
-\caption{Space--time reconstruction on 1D Burgers' ($\nu{=}1.0$,
-  TEMPO(NeuralPOD)): ground truth (\textit{left}), prediction
-  (\textit{centre}), and point-wise absolute error (\textit{right}).}
-\label{fig:reconstruct}
-\end{figure}
 
 
 
@@ -962,35 +888,238 @@ Convergence guarantees for Generalized EM under nonlinear basis parameterisation
 \appendix
 \section{Appendix}\label{app}
 
-\subsection{Algorithms}\label{app:alg}
+\subsection{Additional Experiments}\label{app:exp}
 
-\begin{algorithm}[H]
-\caption{\textsc{WeightedNeuralPOD}$\bigl(
-  \{s^{(i)}, \gamma_{im}\}_{i=1}^N,\;
-  \tau\bigr)$}
-\label{alg:npod}
-\begin{algorithmic}[1]
-\State $\bar{s}_m \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,s^{(i)}$
-  \hfill\Comment{responsibility-weighted mean trajectory}
-\State Train $\phi_0^{(m)}$ by minimizing
-  $\displaystyle\sum_j w_j\bigl(\phi_0^{(m)}(y_j) - (\bar{s}_m)_j\bigr)^2$
-\State $r^{(0,i)} \leftarrow s^{(i)} - \phi_0^{(m)}(y)$
-  \enspace for all $i$;\enspace $k \leftarrow 0$
-\State $V_m \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,\|s^{(i)}-\bar{s}_m\|_w^2$
-  \hfill\Comment{initial unmodeled variance}
-\While{$\displaystyle\sum_{i=1}^N \gamma_{im}\,\|r^{(k,i)}\|_w^2
-  \;\ge\; \tau\, V_m$ \textbf{ and } $k < K_{\max}$}
-  \State Solve $\gamma_{im}$-weighted~\eqref{eq:neuralpod_loss} for $\phi_{k+1}^{(m)}$ and $\bigl\{\lambda_{k+1}^{(m,i)}\bigr\}$
-  \State $r^{(k+1,i)} \leftarrow r^{(k,i)}
-    - \lambda_{k+1}^{(m,i)}\,\phi_{k+1}^{(m)}(y)$
-    \enspace for all $i$
-  \State $k \leftarrow k + 1$
-\EndWhile
-\State \Return $K_m \!\leftarrow\! k$,\enspace
-  $\phi_0^{(m)}$,\enspace
-  $\bigl\{\phi_k^{(m)},\,\{\lambda_k^{(m,i)}\}_{i=1}^N\bigr\}_{k=1}^{K_m}$
-\end{algorithmic}
-\end{algorithm}
+\paragraph{Regime model selection (1D Burgers').}
+Table~\ref{tab:regime_selection} reports BIC, mean assignment entropy~$H$,
+and mean test error~$\bar{\varepsilon}$ for $M\in\{2,3,4\}$.
+Table~\ref{tab:gating} shows the per-viscosity EM responsibilities alongside
+global mixture weights~$\pi_m$; near-uniform agreement across $\nu$ confirms
+geometry-driven rather than parameter-driven regime membership.
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{12pt}
+\caption{Regime count selection on 1D Burgers'.
+  BIC: EM log-likelihood (higher is better);
+  $H$: mean assignment entropy;
+  $\bar{\varepsilon}$: mean relative $L^2$ test error.}
+\label{tab:regime_selection}
+\begin{tabular}{c c c c}
+\toprule
+$M$ & BIC (${\times}10^{4}$) & $H$ & $\bar{\varepsilon}$ \\
+\midrule
+2          & 3.90 & 0.622 & 0.209 \\
+\textbf{3} & \textbf{4.92} & \textbf{0.920} & \textbf{0.222} \\
+4          & 5.47 & 1.099 & 0.228 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{14pt}
+\caption{Mean EM assignment weights per viscosity (1D Burgers',
+  TEMPO(POD), $M{=}3$) vs.\ global mixture weights~$\pi_m$.
+  Each row sums to~$1$; near-uniform agreement across $\nu$ confirms
+  regime membership is driven by~$u_0$ geometry, not by~$\nu$.}
+\label{tab:gating}
+\begin{tabular}{c c c c}
+\toprule
+$\nu$ & Regime~1 & Regime~2 & Regime~3 \\
+\midrule
+0.001 & 0.32 & 0.28 & 0.40 \\
+0.1   & 0.32 & 0.26 & 0.42 \\
+1.0   & 0.33 & 0.26 & 0.41 \\
+\midrule
+$\pi_m$ & 0.32 & 0.27 & 0.41 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{POD basis quality (1D Burgers').}
+Figure~\ref{fig:pod_phase1} shows the singular value spectrum and cumulative
+explained variance for the global POD on 1D Burgers'.
+$K{=}30$ modes capture $99.99\%$ of the total variance, achieving a
+Phase~1 relative $L^2$ reconstruction error of $1.47\%$.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_phase1.png}
+\caption{Global POD basis on 1D Burgers' ($\nu{=}1.0$): singular value spectrum
+  (\textit{left}) and cumulative explained variance (\textit{right}); $K{=}30$ modes attain $99.99\%$.}
+\label{fig:pod_phase1}
+\end{figure}
+
+\paragraph{NeuralPOD basis quality (1D Burgers').}
+Figure~\ref{fig:npod_phase1} shows the greedy residual norm as a function of
+mode count; the steep initial decay confirms that the Fourier NeuralPOD basis
+concentrates variance efficiently.
+Figure~\ref{fig:basis_rec} shows the learned spatial modes alongside
+representative reconstructions; modes are smooth and globally supported for
+large~$\nu$, and sharply localised near the shock front for small~$\nu$.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_phase1.png}
+\caption{Fourier NeuralPOD basis on 1D Burgers' ($\nu{=}1.0$):
+  weighted residual norm versus greedy mode count.}
+\label{fig:npod_phase1}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/Neural_POD_rec_basis.png}
+\caption{Learned Fourier NeuralPOD basis functions and representative
+  reconstructions on 1D Burgers' ($\nu{=}1.0$).}
+\label{fig:basis_rec}
+\end{figure}
+
+\paragraph{POD vs.\ NeuralPOD basis comparison (1D Burgers', $\nu{=}1.0$).}
+Figure~\ref{fig:basis_spectrum} shows the singular-value decay of the global POD
+basis alongside the weighted residual decay of the Fourier NeuralPOD basis.
+Figure~\ref{fig:basis_modes} shows the first $K$ spatiotemporal mode functions
+for both bases; POD modes are globally supported, while NeuralPOD modes
+adapt their spatial localisation to the data.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/basis_spectrum_nu1.0.png}
+\caption{POD singular-value decay (\textit{left}) and Fourier NeuralPOD
+  residual decay (\textit{right}) on 1D Burgers' ($\nu{=}1.0$).}
+\label{fig:basis_spectrum}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/basis_modes_nu1.0.png}
+\caption{First $K$ basis modes on 1D Burgers' ($\nu{=}1.0$):
+  POD (\textit{top}) vs.\ Fourier NeuralPOD (\textit{bottom}).}
+\label{fig:basis_modes}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/basis_modes_nu0.01.png}
+\caption{First $K$ basis modes on 1D Burgers' ($\nu{=}0.01$):
+  POD (\textit{top}) vs.\ Fourier NeuralPOD (\textit{bottom}).}
+\label{fig:basis_modes_nu001}
+\end{figure}
+
+\paragraph{Baseline training curves.}
+Figures~\ref{fig:pod_phase2_loss} and~\ref{fig:npod_phase2_loss} show the
+Phase~2 MSE training curves for POD-DeepONet and NeuralPOD-DeepONet on
+1D Burgers' ($\nu{=}1.0$).
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_phase2_loss.png}
+\caption{Phase~2 MSE training curve for POD-DeepONet on 1D Burgers' ($\nu{=}1.0$).}
+\label{fig:pod_phase2_loss}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_phase2_loss.png}
+\caption{Phase~2 MSE training curve for NeuralPOD-DeepONet on 1D Burgers' ($\nu{=}1.0$).}
+\label{fig:npod_phase2_loss}
+\end{figure}
+
+\paragraph{Error distributions.}
+Figures~\ref{fig:pod_err_dist} and~\ref{fig:npod_err_dist} show the full
+test-set error distributions for POD-DeepONet and NeuralPOD-DeepONet on
+1D Burgers' ($\nu{=}1.0$).
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_err_dist.png}
+\caption{POD-DeepONet test-set error distribution on 1D Burgers' ($\nu{=}1.0$):
+  error histogram (\textit{left}) and sorted errors (\textit{right}).}
+\label{fig:pod_err_dist}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_err_dist.png}
+\caption{NeuralPOD-DeepONet test-set error distribution on 1D Burgers'
+  ($\nu{=}1.0$). Layout as in Figure~\ref{fig:pod_err_dist}.}
+\label{fig:npod_err_dist}
+\end{figure}
+
+\paragraph{Representative reconstructions.}
+Figures~\ref{fig:pod_reconstruction} and~\ref{fig:npod_reconstruction} show
+representative space--time predictions for POD-DeepONet and
+NeuralPOD-DeepONet on 1D Burgers' ($\nu{=}1.0$).
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_reconstruction.png}
+\caption{POD-DeepONet: representative reconstructions on 1D Burgers'
+  ($\nu{=}1.0$). Each row: ground truth (\textit{left}), prediction
+  (\textit{centre}), point-wise absolute error (\textit{right}).}
+\label{fig:pod_reconstruction}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_reconstruction.png}
+\caption{NeuralPOD-DeepONet: representative reconstructions on 1D Burgers'
+  ($\nu{=}1.0$). Layout as in Figure~\ref{fig:pod_reconstruction}.}
+\label{fig:npod_reconstruction}
+\end{figure}
+
+\paragraph{TEMPO reconstructions.}
+Figures~\ref{fig:tempo_pod_burgers_rec}--\ref{fig:tempo_npod_darcy_rec}
+show representative predictions from all four TEMPO variants.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_burgers_reconstruct.png}
+\caption{TEMPO(POD) on 1D Burgers' ($M{=}3$): ground truth (\textit{left}),
+  prediction (\textit{centre}), point-wise absolute error (\textit{right}).}
+\label{fig:tempo_pod_burgers_rec}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_npod_burgers_reconstruct.png}
+\caption{TEMPO(NeuralPOD) on 1D Burgers' ($M{=}3$). Layout as in
+  Figure~\ref{fig:tempo_pod_burgers_rec}.}
+\label{fig:tempo_npod_burgers_rec}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_darcy_reconstruct.png}
+\caption{TEMPO(POD) on 2D Darcy flow ($M{=}5$): ground truth (\textit{left}),
+  prediction (\textit{centre}), point-wise absolute error (\textit{right}).}
+\label{fig:tempo_pod_darcy_rec}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_npod_darcy_reconstruct.png}
+\caption{TEMPO(NeuralPOD) on 2D Darcy flow ($M{=}5$). Layout as in
+  Figure~\ref{fig:tempo_pod_darcy_rec}.}
+\label{fig:tempo_npod_darcy_rec}
+\end{figure}
+
+\paragraph{TEMPO regime structure (2D Darcy flow, $M{=}5$).}
+Figure~\ref{fig:tempo_phase1_darcy} shows the TEMPO Phase~1 regime structure
+on 2D Darcy flow with $M{=}5$ regimes.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/TEMPO_phase1_darcy_M5.png}
+\caption{TEMPO regime structure on 2D Darcy flow ($M{=}5$): UMAP coloured
+  by regime assignment (\textit{left}) and by $\beta$ (\textit{right}).}
+\label{fig:tempo_phase1_darcy}
+\end{figure}
+
+\clearpage
+\subsection{Algorithms}\label{app:alg}
 
 \begin{algorithm}[H]
 \caption{TEMPO --- Offline Phase}
@@ -1022,7 +1151,7 @@ Convergence guarantees for Generalized EM under nonlinear basis parameterisation
 \Repeat
   \Statex \quad\textit{E-step}
   \For{all $i = 1,\ldots,N$ and $m = 1,\ldots,M$}
-    \State Compute $\hat{s}_m^{(i)}$ via~\eqref{eq:separable}
+    \State Compute $\hat{s}_m^{(i)}$ via~\eqref{eq:regime_approx}
       using $\Phi_m^{(q-1)}$ and $\Lambda_m^{(q-1)}$
     \State $\gamma_{im}^{(q)} \leftarrow$ Eq.~\eqref{eq:estep}
   \EndFor
@@ -1035,18 +1164,24 @@ Convergence guarantees for Generalized EM under nonlinear basis parameterisation
       $\Sigma_m^{(q)}$~\eqref{eq:Sigma},\;
       $\Delta_m^{(q)}$~\eqref{eq:Delta}
     \If{$\Delta_m^{(q)} < \varepsilon_s$}
-      \State $\Phi_m^{(q)} \leftarrow \Phi_m^{(q-1)}$ \Comment{Skip}
+      \State $\Phi_m^{(q)} \leftarrow \Phi_m^{(q-1)}$
+        \hfill \textsc{Skip}
     \ElsIf{$\Delta_m^{(q)} < \varepsilon_l$}
-      \State Recompute $r_m^{(K_m,i)}$ and $V_m^{(q)} \leftarrow \textstyle\sum_i\gamma_{im}^{(q)}\|s^{(i)}{-}\bar{s}_m^{(q)}\|_w^2$ \Comment{Incremental}
-      \If{$\sum_i\gamma_{im}^{(q)}\|r_m^{(K_m,i)}\|_w^2 \ge \tau\cdot V_m^{(q)}$}
-        \State Train mode $K_m{+}1$;\; $K_m \leftarrow K_m + 1$
+      \hfill \textsc{Incremental}
+      \State Compute $r_m^{(P_m)}$ under updated $\gamma^{(q)}$;\;
+        $V_m^{(q)} \leftarrow \sum_i\gamma_{im}^{(q)}\|s^{(i)}{-}\bar{s}_m^{(q)}\|_w^2$
+      \If{$\sum_i\gamma_{im}^{(q)}\|r_m^{(P_m,i)}\|_w^2 \ge \tau\cdot V_m^{(q)}$}
+        \State Train mode $P_m{+}1$;\; $P_m \leftarrow P_m + 1$
       \EndIf
-      \If{$\|\phi_{K_m}^{(m)}\|_w^2\cdot\displaystyle\sum_{i=1}^N
-        \gamma_{im}^{(q)}\,\bigl(\lambda_{K_m}^{(m,i)}\bigr)^2 < \varepsilon_p$}
-        \State $K_m \leftarrow K_m - 1$
+      \If{$\|\phi_{P_m}^{(m)}\|_w^2\cdot\displaystyle\sum_{i=1}^N
+        \gamma_{im}^{(q)}\,\bigl(\lambda_{P_m}^{(m,i)}\bigr)^2 < \varepsilon_p$}
+        \State $P_m \leftarrow P_m - 1$
       \EndIf
     \Else
-      \State $\Phi_m^{(q)},\,\Lambda_m^{(q)} \leftarrow \Call{WeightedNeuralPOD}{\{s^{(i)},\gamma_{im}^{(q)}\},\,\tau}$ \Comment{Full rerun}
+      \hfill \textsc{Full rerun}
+      \State $\Phi_m^{(q)},\,\Lambda_m^{(q)} \leftarrow$
+        \Call{WeightedNeuralPOD}
+        {$\{s^{(i)},\gamma_{im}^{(q)}\},\,\tau$}
     \EndIf
   \EndFor
 \Until{$\max_m \Delta_m^{(q)} < \varepsilon_c$}
@@ -1057,108 +1192,38 @@ Convergence guarantees for Generalized EM under nonlinear basis parameterisation
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{Additional Experiments}\label{app:exp}
-
-\paragraph{POD basis quality (1D Burgers').}
-Figure~\ref{fig:pod_phase1} shows the singular value spectrum and cumulative
-explained variance for the global POD on 1D Burgers'.
-$K{=}30$ modes capture $99.99\%$ of the total variance, achieving a
-Phase~1 relative $L^2$ reconstruction error of $1.47\%$.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_phase1.png}
-\caption{Global POD basis on 1D Burgers' ($\nu{=}1.0$, $K{=}30$ modes).
-  \textit{Left:} singular value spectrum.
-  \textit{Right:} cumulative explained variance; $K{=}30$ modes attain $99.99\%$.}
-\label{fig:pod_phase1}
-\end{figure}
-
-\paragraph{NeuralPOD basis quality (1D Burgers').}
-Figure~\ref{fig:npod_phase1} shows the greedy residual norm as a function of
-mode count; the steep initial decay confirms that the Fourier NeuralPOD basis
-concentrates variance efficiently.
-Figure~\ref{fig:basis_rec} shows the learned spatial modes alongside
-representative reconstructions; modes are smooth and globally supported for
-large~$\nu$, and sharply localised near the shock front for small~$\nu$.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_phase1.png}
-\caption{Fourier NeuralPOD basis on 1D Burgers' ($\nu{=}1.0$):
-  weighted residual norm versus greedy mode count.}
-\label{fig:npod_phase1}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/Neural_POD_rec_basis.png}
-\caption{Learned Fourier NeuralPOD basis functions and representative
-  reconstructions on 1D Burgers' ($\nu{=}1.0$).}
-\label{fig:basis_rec}
-\end{figure}
-
-\paragraph{Baseline training curves.}
-Figures~\ref{fig:pod_phase2_loss} and~\ref{fig:npod_phase2_loss} show the
-Phase~2 MSE training curves for POD-DeepONet and NeuralPOD-DeepONet on
-1D Burgers' ($\nu{=}1.0$).
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_phase2_loss.png}
-\caption{Phase~2 MSE training curve for POD-DeepONet on 1D Burgers' ($\nu{=}1.0$).}
-\label{fig:pod_phase2_loss}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_phase2_loss.png}
-\caption{Phase~2 MSE training curve for NeuralPOD-DeepONet on 1D Burgers' ($\nu{=}1.0$).}
-\label{fig:npod_phase2_loss}
-\end{figure}
-
-\paragraph{Error distributions.}
-Figures~\ref{fig:pod_err_dist} and~\ref{fig:npod_err_dist} show the full
-test-set error distributions for POD-DeepONet and NeuralPOD-DeepONet on
-1D Burgers' ($\nu{=}1.0$).
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_err_dist.png}
-\caption{POD-DeepONet test-set error distribution on 1D Burgers' ($\nu{=}1.0$).
-  \textit{Left:} histogram with mean (red dashed) and median (blue dashed).
-  \textit{Right:} sorted relative $L^2$ errors.}
-\label{fig:pod_err_dist}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_err_dist.png}
-\caption{NeuralPOD-DeepONet test-set error distribution on 1D Burgers'
-  ($\nu{=}1.0$). Layout as in Figure~\ref{fig:pod_err_dist}.}
-\label{fig:npod_err_dist}
-\end{figure}
-
-\paragraph{Representative reconstructions.}
-Figures~\ref{fig:pod_reconstruction} and~\ref{fig:npod_reconstruction} show
-representative space--time predictions for POD-DeepONet and
-NeuralPOD-DeepONet on 1D Burgers' ($\nu{=}1.0$).
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_reconstruction.png}
-\caption{POD-DeepONet: representative reconstructions on 1D Burgers'
-  ($\nu{=}1.0$). Each row: ground truth (\textit{left}), prediction
-  (\textit{centre}), point-wise absolute error (\textit{right}).}
-\label{fig:pod_reconstruction}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_reconstruction.png}
-\caption{NeuralPOD-DeepONet: representative reconstructions on 1D Burgers'
-  ($\nu{=}1.0$). Layout as in Figure~\ref{fig:pod_reconstruction}.}
-\label{fig:npod_reconstruction}
-\end{figure}
+\begin{algorithm}[t]
+\caption{\textsc{WeightedNeuralPOD}$\bigl(
+  \{s^{(i)}, \gamma_{im}\}_{i=1}^N,\;
+  \tau\bigr)$}
+\label{alg:npod}
+\begin{algorithmic}[1]
+\State $\bar{s}^{(m)} \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,s^{(i)}$
+  \hfill\Comment{responsibility-weighted mean trajectory}
+\State Train $\phi_0^{(m)}$ by minimizing
+  $\displaystyle\sum_j w_j\bigl(\phi_0^{(m)}(y_j) - \bar{s}^{(m)}_j\bigr)^2$
+\State $r^{(0,i)} \leftarrow s^{(i)} - \phi_0^{(m)}(y)$
+  \enspace for all $i$;\enspace $p \leftarrow 0$
+\State $V_m \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,\|s^{(i)}-\bar{s}^{(m)}\|_w^2$
+  \hfill\Comment{initial unmodeled variance}
+\While{$\displaystyle\sum_{i=1}^N \gamma_{im}\,\|r^{(p,i)}\|_w^2
+  \;\ge\; \tau\, V_m$ \textbf{ and } $p < P_{\max}$}
+  \State Jointly minimize over $\phi_{p+1}^{(m)}$ and
+    $\{\lambda_{p+1}^{(m,i)}\}_{i=1}^N$:
+    \[
+      \sum_{i=1}^N \gamma_{im}
+      \sum_j w_j\!\left(\lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y_j)
+      - r^{(p,i)}_j\right)^{\!2}
+    \]
+  \State $r^{(p+1,i)} \leftarrow r^{(p,i)}
+    - \lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y)$
+    \enspace for all $i$
+  \State $p \leftarrow p + 1$
+\EndWhile
+\State \Return $P_m \!\leftarrow\! p$,\enspace
+  $\phi_0^{(m)}$,\enspace
+  $\bigl\{\phi_p^{(m)},\,\{\lambda_p^{(m,i)}\}_{i=1}^N\bigr\}_{p=1}^{P_m}$
+\end{algorithmic}
+\end{algorithm}
 
 \end{document}
