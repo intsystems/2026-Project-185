@@ -1,0 +1,43 @@
+{
+  "run_name": "pod_deeponet_joint_darcy_v1",
+  "n_modes": 32,
+  "n_train": 28000,
+  "n_test": 4000,
+  "overall_mean": 0.8620408773422241,
+  "overall_median": 0.3292321562767029,
+  "beta0.1_mean": 2.556912422180176,
+  "beta0.1_median": 2.406806468963623,
+  "beta0.1_std": 1.4539031982421875,
+  "beta1_mean": 0.36325913667678833,
+  "beta1_median": 0.3454996943473816,
+  "beta1_std": 0.13039778172969818,
+  "beta10_mean": 0.18098586797714233,
+  "beta10_median": 0.17051151394844055,
+  "beta10_std": 0.06129425764083862,
+  "beta100_mean": 0.34700629115104675,
+  "beta100_median": 0.30544841289520264,
+  "beta100_std": 0.1326659619808197,
+  "hparams": {
+    "run_name": "pod_deeponet_joint_darcy_v1",
+    "results_dir": "/home/a.bulkin/TEMPO/code/TEMPO_results/darcy",
+    "beta_values": [
+      0.1,
+      1.0,
+      10.0,
+      100.0
+    ],
+    "n_samples": 8000,
+    "n_test_per_beta": 1000,
+    "data_dir": "/home/a.bulkin/data/2D/DarcyFlow",
+    "max_modes": 32,
+    "hidden_dim": 256,
+    "n_layers": 4,
+    "sensor_stride": 4,
+    "n_epochs": 600,
+    "batch_size": 1024,
+    "lr": 0.0003,
+    "log_every": 500,
+    "seed": 42,
+    "n_viz": 2
+  }
+}

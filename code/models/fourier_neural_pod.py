@@ -46,8 +46,8 @@ class FourierNeuralPODConfig:
     max_modes: int = 5
     n_epochs_mean: int = 165
     n_epochs_mode: int = 85
-    traj_batch_size: int = 1024  # batch size over N (trajectories)
-    epoch_subset: float = 1.0    # fraction of N sampled per epoch (< 1 speeds up EM)
+    traj_batch_size: int = 1024
+    epoch_subset: float = 1.0    # fraction of N sampled per epoch; < 1 speeds up EM
     grad_clip_norm: float = 1.0
     pct_start: float = 0.1
     div_factor: float = 25.0
@@ -95,7 +95,7 @@ class FourierNeuralPODTrainer:
         dev = self._device
 
         x = x.to(device=dev, dtype=dtype)
-        w = self.basis.quad_weights.to(device=dev, dtype=dtype)  # (Ny,)
+        w = self.basis.quad_weights.to(device=dev, dtype=dtype)
 
         if gamma is None:
             gamma_cpu = torch.ones(N, dtype=dtype) / N
@@ -105,7 +105,7 @@ class FourierNeuralPODTrainer:
 
         print(f"Fourier NeuralPOD | N={N}, Ny={Ny} | max_modes={self.cfg.max_modes} | traj_batch={self.cfg.traj_batch_size}")
 
-        s_mean_cpu = (gamma_cpu[:, None] * s.cpu()).sum(dim=0)  # (Ny,) on CPU
+        s_mean_cpu = (gamma_cpu[:, None] * s.cpu()).sum(dim=0)
         s_mean_dev = s_mean_cpu.to(dev)
 
         s_centered = s.cpu() - s_mean_cpu[None, :]
@@ -187,13 +187,13 @@ class FourierNeuralPODTrainer:
 
         subset_n = max(B, int(self.cfg.epoch_subset * N))
 
-        # sample once: top-k by gamma (most active trajectories)
-        idx_subset = gamma_cpu.topk(subset_n).indices  # (subset_n,) on CPU
+        # top-k by gamma so high-responsibility trajectories are always included
+        idx_subset = gamma_cpu.topk(subset_n).indices
         idx_subset_dev = idx_subset.to(dev)
 
-        # preload residual subset to GPU to avoid repeated CPU→GPU transfers
-        r_sub_dev = r[idx_subset].to(dev)               # (subset_n, Ny)
-        gamma_sub = gamma_dev[idx_subset_dev]            # (subset_n,)
+        # preload to gpu to avoid repeated cpu-gpu transfers per epoch
+        r_sub_dev = r[idx_subset].to(dev)
+        gamma_sub = gamma_dev[idx_subset_dev]
 
         p = len(self.history.mode_losses) + 1
         pbar = tqdm(range(self.cfg.n_epochs_mode), desc=f"mode {p}", leave=False)
@@ -205,17 +205,17 @@ class FourierNeuralPODTrainer:
 
             perm = torch.randperm(subset_n, device=dev)
 
-            phi = mode.phi(x)  # (Ny,) evaluated once per epoch
+            phi = mode.phi(x)  # evaluated once per epoch, shared across mini-batches
 
             for start in range(0, subset_n, B):
                 idx_b_dev = perm[start : start + B]
 
-                r_b     = r_sub_dev[idx_b_dev]            # (B, Ny) — already on GPU
-                gamma_b = gamma_sub[idx_b_dev]            # (B,)
-                lam_b   = mode.lambda_ten[idx_subset_dev[idx_b_dev]]  # (B,)
+                r_b     = r_sub_dev[idx_b_dev]
+                gamma_b = gamma_sub[idx_b_dev]
+                lam_b   = mode.lambda_ten[idx_subset_dev[idx_b_dev]]
 
                 pred   = torch.outer(phi, lam_b)          # (Ny, B)
-                diff   = (pred - r_b.T) ** 2              # (Ny, B)
+                diff   = (pred - r_b.T) ** 2
                 loss_b = (diff * w[:, None] * gamma_b[None, :]).sum()
                 loss_b.backward(retain_graph=(start + B < subset_n))
 

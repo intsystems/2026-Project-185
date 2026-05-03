@@ -1,0 +1,70 @@
+{
+  "run_name": "npod_deeponet_nu0.1_fast",
+  "n_modes": 12,
+  "n_train": 2500,
+  "n_test": 500,
+  "train_mean": 0.935012698173523,
+  "train_median": 0.9400732517242432,
+  "train_std": 0.28542155027389526,
+  "test_mean": 0.9172337651252747,
+  "test_median": 0.9375365376472473,
+  "test_std": 0.07726601511240005,
+  "test_p95": 1.012869119644165,
+  "cross_nu": {
+    "0.001": {
+      "mean": 0.9505040645599365,
+      "median": 0.9523318409919739,
+      "std": 0.1119333878159523,
+      "p95": 1.0719374418258667
+    },
+    "0.01": {
+      "mean": 0.9573391079902649,
+      "median": 0.9541373252868652,
+      "std": 0.21180963516235352,
+      "p95": 1.0662682056427002
+    },
+    "0.1": {
+      "mean": 0.9207521677017212,
+      "median": 0.9400202035903931,
+      "std": 0.09227023273706436,
+      "p95": 1.0216625928878784
+    },
+    "1.0": {
+      "mean": 0.915515661239624,
+      "median": 0.9294840693473816,
+      "std": 0.16025203466415405,
+      "p95": 1.0697399377822876
+    }
+  },
+  "hparams": {
+    "nu": 0.1,
+    "run_name": "npod_deeponet_nu0.1_fast",
+    "results_dir": "/Users/rknza/research/m1p/project/code/TEMPO_results/burgers",
+    "all_nu": [
+      0.001,
+      0.01,
+      0.1,
+      1.0
+    ],
+    "n_train": 2500,
+    "n_test": 500,
+    "max_modes": 12,
+    "n_epochs_mean": 165,
+    "n_epochs_mode": 50,
+    "hidden_dim_basis": 256,
+    "num_frequencies": 96,
+    "scales": [
+      0.5,
+      2.0,
+      6.0
+    ],
+    "n_layers_basis": 3,
+    "hidden_dim": 256,
+    "n_layers": 4,
+    "sensor_stride": 1,
+    "n_epochs": 80000,
+    "batch_size": 1024,
+    "seed": 42,
+    "n_viz": 3
+  }
+}

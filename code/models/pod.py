@@ -108,14 +108,12 @@ class PODTrainer:
 
         sqrt_gamma = gamma.sqrt()
         if gpu != s.device:
-            # move to GPU first, then center and scale in-place to avoid a large CPU copy
+            # move to GPU before centering to avoid a large CPU intermediate copy
             s_weighted_gpu = s.to(gpu, dtype=torch.float32)
             s_weighted_gpu.sub_(mean.to(gpu)).mul_(sqrt_gamma.to(gpu).unsqueeze(1))
         else:
-            # sub() yields a new tensor; mul_ avoids a second allocation
             s_weighted_gpu = s.sub(mean.unsqueeze(0)).mul_(sqrt_gamma.unsqueeze(1)).to(dtype=torch.float32)
 
-        # randomized SVD: top-q singular vectors, O(N*q) memory
         # MPS does not support linalg_qr used internally by svd_lowrank
         q = min(self.cfg.max_modes + 10, min(N, Ny))
         svd_input = s_weighted_gpu.cpu() if s_weighted_gpu.device.type == "mps" else s_weighted_gpu
@@ -133,11 +131,11 @@ class PODTrainer:
         for p in range(P):
             print(f"  mode {p+1:2d}: sigma={sigma[p].item():.4e}  cumvar={cumvar[p].item()*100:.2f}%")
 
-        modes = V[:, :P].to(device=dev, dtype=dtype)  # (Ny, P)
+        modes = V[:, :P].to(device=dev, dtype=dtype)
         del V
 
-        coeffs = (s @ modes - (mean @ modes).unsqueeze(0)).cpu()  # (N, P)
-        modes = modes.cpu()  # (Ny, P)
+        coeffs = (s @ modes - (mean @ modes).unsqueeze(0)).cpu()
+        modes = modes.cpu()
 
         self.basis.initialize(mean, modes, coeffs)
         self.num_modes = P

@@ -334,7 +334,7 @@ def plot_umap_regimes(
 
     M           = mu.shape[0]
     param_unique = np.unique(param_vals)
-    PCMAP        = plt.cm.plasma
+    PCMAP        = plt.cm.Dark2
     param_to_col = {v: PCMAP(i / max(len(param_unique) - 1, 1))
                     for i, v in enumerate(param_unique)}
     point_colors_reg   = [regime_colors[m] for m in hard_labels]

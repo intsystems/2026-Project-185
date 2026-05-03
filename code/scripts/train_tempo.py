@@ -49,6 +49,8 @@ def parse_args():
     p.add_argument("--eps_skip",      type=float, default=0.01)
     p.add_argument("--eps_large",     type=float, default=0.1)
     p.add_argument("--eps_conv",      type=float, default=0.005)
+    p.add_argument("--heteroscedastic", action="store_true",
+                   help="Use relative error in EM E-step (robust for multi-scale data)")
 
     # Regime basis
     p.add_argument("--basis_type",    type=str,   default="pod",
@@ -65,11 +67,11 @@ def parse_args():
 
     # Online phase (TEMPOOnlineConfig)
     p.add_argument("--online_lr",         type=float, default=3e-4)
-    p.add_argument("--online_epochs",     type=int,   default=400)
+    p.add_argument("--online_epochs",     type=int,   default=1200)
     p.add_argument("--online_batch",      type=int,   default=16)
     p.add_argument("--online_hidden_dim", type=int,   default=128)
     p.add_argument("--online_n_layers",   type=int,   default=4)
-    p.add_argument("--sensor_stride",     type=int,   default=2)
+    p.add_argument("--sensor_stride",     type=int,   default=1)
     p.add_argument("--lambda_kl",         type=float, default=0.1)
     p.add_argument("--lambda_ent",        type=float, default=0.1)
     p.add_argument("--log_every",         type=int,   default=20)
@@ -109,7 +111,7 @@ def main():
 
     REGIME_COLORS = [plt.cm.tab10(i) for i in range(10)]
     regime_colors = REGIME_COLORS[:args.M]
-    NU_CMAP = plt.cm.plasma
+    _D2 = plt.cm.Dark2
 
     # --- Data loading ---
     entries = [
@@ -154,6 +156,7 @@ def main():
         eps_skip=args.eps_skip,
         eps_large=args.eps_large,
         eps_conv=args.eps_conv,
+        heteroscedastic=args.heteroscedastic,
         basis_config=basis_cfg,
         basis_factory=basis_factory,
     )
@@ -309,8 +312,7 @@ def main():
         print(f"  nu={nu:.3f}: {rel_l2[mask].mean():.4f} +/- {rel_l2[mask].std():.4f}")
 
     # Gating + error plots
-    nu_to_col_t = {nu: NU_CMAP(i / max(len(nu_unique_t) - 1, 1))
-                   for i, nu in enumerate(nu_unique_t)}
+    nu_to_col_t = {nu: _D2(i / 7) for i, nu in enumerate(nu_unique_t)}
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 4))
 
@@ -347,29 +349,40 @@ def main():
     plt.close()
 
     # Reconstruction examples
-    fig, axes = plt.subplots(len(nu_unique_t), 3,
-                             figsize=(13, 3.5 * len(nu_unique_t)))
-    if len(nu_unique_t) == 1:
+    n_rows = len(nu_unique_t)
+    fig, axes = plt.subplots(n_rows, 3, figsize=(13, 3.5 * n_rows))
+    if n_rows == 1:
         axes = axes[None, :]
+    col_titles = ["Ground Truth", "Prediction", "Absolute Error"]
     for row, nu in enumerate(nu_unique_t):
         idx_nu  = np.where(kappa_t_np == nu)[0][0]
         s_true  = s_test_np[idx_nu].reshape(Nt, Nx)
         s_hat   = s_pred_np[idx_nu].reshape(Nt, Nx)
         err     = np.abs(s_true - s_hat)
-        vmin, vmax = s_true.min(), s_true.max()
+        rl2     = float(np.linalg.norm(s_true - s_hat) / np.linalg.norm(s_true))
+        vmax    = np.abs(s_true).max()
         kw = dict(aspect="auto", origin="lower",
                   extent=[x_np.min(), x_np.max(), t_np.min(), t_np.max()])
-        axes[row, 0].imshow(s_true,  vmin=vmin, vmax=vmax, cmap="RdBu_r", **kw)
-        axes[row, 1].imshow(s_hat,   vmin=vmin, vmax=vmax, cmap="RdBu_r", **kw)
-        im = axes[row, 2].imshow(err, cmap="Oranges", **kw)
-        plt.colorbar(im, ax=axes[row, 2], fraction=0.046)
-        axes[row, 0].set_title(f"nu={nu:.3f} - ground truth")
-        axes[row, 1].set_title(f"nu={nu:.3f} - TEMPO")
-        axes[row, 2].set_title(f"nu={nu:.3f} - |error|")
-        for ax in axes[row]:
-            ax.set_xlabel("x"); ax.set_ylabel("t")
+        label = f"$\\nu$={nu:.3f},  rel L2={rl2:.3f}"
+        for col, (arr, cmap, vmin, vm) in enumerate([
+            (s_true, "RdBu_r", -vmax, vmax),
+            (s_hat,  "RdBu_r", -vmax, vmax),
+            (err,    "Oranges",    0, err.max()),
+        ]):
+            ax = axes[row, col]
+            im = ax.imshow(arr, vmin=vmin, vmax=vm, cmap=cmap, **kw)
+            if row == 0:
+                ax.set_title(col_titles[col], fontweight="bold")
+            if col == 0:
+                ax.set_ylabel("t", fontsize=9)
+                ax.text(0.02, 0.98, label, transform=ax.transAxes,
+                        ha="left", va="top", fontsize=8, fontweight="bold",
+                        bbox=dict(facecolor="white", alpha=0.75, edgecolor="none", pad=2))
+            if row == n_rows - 1:
+                ax.set_xlabel("x")
             ax.spines[["top", "right"]].set_visible(False)
-    plt.suptitle(f"Space-time reconstructions - TEMPO({args.basis_type.upper()})",
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    plt.suptitle(f"TEMPO({args.basis_type.upper()}): reconstruction examples",
                  fontweight="bold", fontsize=13)
     plt.tight_layout()
     plt.savefig(os.path.join(RUN_DIR, "reconstruct.png"), dpi=150, bbox_inches="tight")

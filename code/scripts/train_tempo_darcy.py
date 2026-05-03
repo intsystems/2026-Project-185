@@ -43,13 +43,13 @@ def parse_args():
                    help="Override data directory (default: local data/ or ~/data/2D/DarcyFlow)")
 
     # EM (TEMPOConfig)
-    p.add_argument("--M",             type=int,   default=3)
+    p.add_argument("--M",             type=int,   default=4)
     p.add_argument("--P_global",      type=int,   default=25)
     p.add_argument("--sigma2",        type=float, default=0.1)
     p.add_argument("--max_em_iters",  type=int,   default=30)
-    p.add_argument("--eps_skip",      type=float, default=0.01)
+    p.add_argument("--eps_skip",      type=float, default=1e-10)
     p.add_argument("--eps_large",     type=float, default=0.1)
-    p.add_argument("--eps_conv",      type=float, default=0.005)
+    p.add_argument("--eps_conv",      type=float, default=0.0)
 
     # Regime basis
     p.add_argument("--basis_type",    type=str,   default="pod", choices=["pod", "fourier"])
@@ -64,22 +64,24 @@ def parse_args():
 
     # Online phase
     p.add_argument("--online_lr",         type=float, default=3e-4)
-    p.add_argument("--online_epochs",     type=int,   default=400)
+    p.add_argument("--online_epochs",     type=int,   default=500)
     p.add_argument("--online_batch",      type=int,   default=16)
     p.add_argument("--online_hidden_dim", type=int,   default=128)
     p.add_argument("--online_n_layers",   type=int,   default=4)
-    p.add_argument("--sensor_stride",     type=int,   default=4)
+    p.add_argument("--sensor_stride",     type=int,   default=1)
     p.add_argument("--lambda_kl",         type=float, default=0.1)
     p.add_argument("--lambda_ent",        type=float, default=0.1)
     p.add_argument("--log_every",         type=int,   default=20)
 
     # EM init
-    p.add_argument("--kappa_init",         action="store_true", default=False,
+    p.add_argument("--kappa_init",         action="store_true", default=True,
                    help="Init regimes from log(beta) spacing instead of GMM on alpha")
-    p.add_argument("--kappa_prior_weight", type=float, default=1.0,
+    p.add_argument("--kappa_prior_weight", type=float, default=0.1,
                    help="Weight lambda of beta-prior term in E-step (only with --kappa_init)")
     p.add_argument("--kappa_init_noise",   type=float, default=0.05,
                    help="Uniform noise on initial gamma to ensure EM runs real iterations")
+    p.add_argument("--heteroscedastic",    action=argparse.BooleanOptionalAction, default=True,
+                   help="Use relative error in EM E-step (robust for multi-scale data)")
 
     # Misc
     p.add_argument("--seed",          type=int,   default=42)
@@ -175,6 +177,7 @@ def main():
         eps_skip=args.eps_skip,
         eps_large=args.eps_large,
         eps_conv=args.eps_conv,
+        heteroscedastic=args.heteroscedastic,
         kappa_init=args.kappa_init,
         kappa_prior_weight=args.kappa_prior_weight,
         kappa_init_noise=args.kappa_init_noise,
@@ -200,6 +203,7 @@ def main():
             axes[2].plot(log["iter"], delta_m, "o-", color=regime_colors[m],
                          lw=1.5, markersize=4, label=f"Regime {m+1}")
         axes[2].axhline(args.eps_conv, color="gray", ls="--", lw=1.2, label="eps_conv")
+        axes[2].set_yscale("log")
         axes[2].set_xlabel("EM iteration"); axes[2].set_ylabel("Delta")
         axes[2].set_title("EM: distribution shift per regime", fontweight="bold")
         axes[2].legend(fontsize=8, framealpha=0.7)
@@ -323,9 +327,7 @@ def main():
         print(f"  beta={beta}: {rel_l2[mask].mean():.4f} +/- {rel_l2[mask].std():.4f}")
 
     # Gating weights plot
-    NU_CMAP = plt.cm.plasma
-    beta_to_col = {beta: NU_CMAP(i / max(len(beta_unique) - 1, 1))
-                   for i, beta in enumerate(beta_unique)}
+    beta_to_col = {beta: plt.cm.Dark2(i / 7) for i, beta in enumerate(beta_unique)}
     fig, axes = plt.subplots(1, 2, figsize=(14, 4))
     x_pos = np.arange(len(beta_unique))
     width = 0.8 / args.M

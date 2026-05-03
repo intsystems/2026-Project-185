@@ -1,0 +1,124 @@
+{
+  "run_name": "tempo_pod_M3_v1",
+  "M": 3,
+  "basis_type": "pod",
+  "n_train": 1200,
+  "n_test": 300,
+  "overall_mean": NaN,
+  "overall_median": NaN,
+  "nu0.001_mean": NaN,
+  "nu0.001_median": NaN,
+  "nu0.001_std": NaN,
+  "nu0.100_mean": NaN,
+  "nu0.100_median": NaN,
+  "nu0.100_std": NaN,
+  "nu1.000_mean": NaN,
+  "nu1.000_median": NaN,
+  "nu1.000_std": NaN,
+  "phase1_log": {
+    "iter": [
+      1,
+      2
+    ],
+    "ll": [
+      -2238.587890625,
+      -1996.456787109375
+    ],
+    "bic": [
+      12170.68374824524,
+      11686.42154121399
+    ],
+    "entropy": [
+      0.7389068007469177,
+      0.8011438846588135
+    ],
+    "delta": [
+      [
+        24.519046783447266,
+        40.40473175048828,
+        0.8049793243408203
+      ],
+      [
+        0.21725767850875854,
+        0.21716558933258057,
+        0.20104876160621643
+      ]
+    ],
+    "delta_max": [
+      40.40473175048828,
+      0.21725767850875854
+    ],
+    "pi": [
+      [
+        0.2849225103855133,
+        0.25828462839126587,
+        0.4567928612232208
+      ],
+      [
+        0.2667108476161957,
+        0.23292966187000275,
+        0.5003594756126404
+      ]
+    ]
+  },
+  "phase2_log": {
+    "total": [
+      1.8099092642466228,
+      NaN,
+      NaN
+    ],
+    "data": [
+      0.3797996891538302,
+      NaN,
+      NaN
+    ],
+    "kl": [
+      15.331560541788736,
+      NaN,
+      NaN
+    ],
+    "ent": [
+      1.0304648494720459,
+      NaN,
+      NaN
+    ]
+  },
+  "hparams": {
+    "run_name": null,
+    "results_dir": "/Users/rknza/research/m1p/project/code/TEMPO_results/burgers",
+    "nu_values": [
+      0.001,
+      0.1,
+      1.0
+    ],
+    "n_samples": 500,
+    "n_test_per_nu": 100,
+    "data_dir": "/Users/rknza/data/1D/Burgers/Train",
+    "M": 3,
+    "P_global": 25,
+    "sigma2": 0.1,
+    "max_em_iters": 2,
+    "eps_skip": 0.01,
+    "eps_large": 0.1,
+    "eps_conv": 0.005,
+    "basis_type": "pod",
+    "basis_max_modes": 32,
+    "total_modes": null,
+    "n_epochs_mean": 165,
+    "n_epochs_mode": 50,
+    "fourier_epoch_subset": null,
+    "online_lr": 0.0003,
+    "online_epochs": 3,
+    "online_batch": 16,
+    "online_hidden_dim": 128,
+    "online_n_layers": 4,
+    "sensor_stride": 1,
+    "lambda_kl": 0.1,
+    "lambda_ent": 0.1,
+    "log_every": 1,
+    "seed": 42,
+    "n_viz": 3,
+    "n_umap": 5000,
+    "skip_umap": true
+  }
+}

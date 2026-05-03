@@ -28,6 +28,8 @@ def rel_l2(true, pred):
 _SCRIPT_DIR   = pathlib.Path(__file__).resolve().parent
 _PROJECT_ROOT = _SCRIPT_DIR.parent
 
+_EPOCHS_PER_BETA = {0.01: 100, 0.1: 100, 1.0: 180, 10.0: 1000, 100.0: 5800}
+
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -40,8 +42,9 @@ def parse_args():
     p.add_argument("--max_modes",    type=int,   default=32)
     p.add_argument("--hidden_dim",   type=int,   default=256)
     p.add_argument("--n_layers",     type=int,   default=4)
-    p.add_argument("--sensor_stride", type=int,  default=4)
-    p.add_argument("--n_epochs",     type=int,   default=500)
+    p.add_argument("--sensor_stride", type=int,  default=1)
+    p.add_argument("--n_epochs",     type=int,   default=-1,
+                   help="Branch epochs. -1 = auto per beta (see _EPOCHS_PER_BETA).")
     p.add_argument("--batch_size",   type=int,   default=1024)
     p.add_argument("--seed",         type=int,   default=39)
     p.add_argument("--n_viz",        type=int,   default=3)
@@ -59,6 +62,8 @@ def main():
     args = parse_args()
 
     TRAIN_BETA = args.beta
+    n_epochs   = args.n_epochs if args.n_epochs != -1 else _EPOCHS_PER_BETA.get(TRAIN_BETA, 500)
+    print(f"n_epochs={n_epochs} (beta={TRAIN_BETA})")
     RUN_NAME   = args.run_name or f"pod_deeponet_darcy_beta{TRAIN_BETA}_v1"
     RUN_DIR    = os.path.join(args.results_dir, RUN_NAME)
     os.makedirs(RUN_DIR, exist_ok=True)
@@ -114,7 +119,7 @@ def main():
     branch = BranchNet(m=m, P=P, hidden_dim=args.hidden_dim, n_layers=args.n_layers).to(DEVICE)
     model  = PODDeepONet(trainer_pod.basis, branch).to(DEVICE)
 
-    cfg     = PODDeepONetConfig(n_epochs=args.n_epochs, batch_size=args.batch_size,
+    cfg     = PODDeepONetConfig(n_epochs=n_epochs, batch_size=args.batch_size,
                                 sensor_stride=args.sensor_stride)
     trainer = PODDeepONetTrainer(model, cfg)
     history = trainer.train(a_t_train, val_u0=a_t_test, val_s=s_test_flat)

@@ -176,8 +176,7 @@ class TEMPOOnlineTrainer:
             batch_size=self.cfg.batch_size,
             shuffle=True,
             pin_memory=(device.type == "cuda"),
-            num_workers=2,
-            persistent_workers=True,
+            num_workers=0,
         )
         opt = torch.optim.AdamW(self.model.parameters(),
                                 lr=self.cfg.lr, weight_decay=1e-4)
@@ -207,6 +206,7 @@ class TEMPOOnlineTrainer:
 
                 opt.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 opt.step()
 
                 n_b = u0_b.shape[0]

@@ -20,7 +20,7 @@ class PODDeepONetConfig:
     batch_size: int = 64
     hidden_dim: int = 128
     n_layers: int = 4
-    sensor_stride: int = 1  # spatial downsampling of u0 input
+    sensor_stride: int = 1
     log_every: int = 50
     val_every: int = 50
 
@@ -69,7 +69,6 @@ class PODDeepONet(nn.Module):
         super().__init__()
         self.basis = basis
         self.branch = branch
-        # freeze POD basis
         for p in basis.parameters():
             p.requires_grad_(False)
 
@@ -120,21 +119,20 @@ class PODDeepONetTrainer:
         device = next(self.model.parameters()).device
         stride = self.cfg.sensor_stride
 
-        u0_sensors = u0[:, ::stride].to(device)  # (N, m)
-        targets = basis.coeffs.to(device)         # (N, P)
+        u0_sensors = u0[:, ::stride].to(device)
+        targets = basis.coeffs.to(device)
 
         N, m = u0_sensors.shape
         P = targets.shape[1]
         print(f"PODDeepONet Phase 2 | N={N}, m={m}, P={P}")
 
-        # Precompute val targets: exact L2 projection of val snapshots onto POD basis
         self.val_history = []
         do_val = val_u0 is not None and val_s is not None
         if do_val:
-            mean_d   = basis.mean.to(device)                                    # (Nxy,)
-            modes_d  = basis.modes.to(device)                                   # (Nxy, P)
-            val_sens = val_u0[:, ::stride].to(device)                          # (N_val, m)
-            val_tgt  = (val_s.to(device) - mean_d.unsqueeze(0)) @ modes_d     # (N_val, P)
+            mean_d   = basis.mean.to(device)
+            modes_d  = basis.modes.to(device)
+            val_sens = val_u0[:, ::stride].to(device)
+            val_tgt  = (val_s.to(device) - mean_d.unsqueeze(0)) @ modes_d
 
         dl = DataLoader(TensorDataset(u0_sensors, targets),
                         batch_size=self.cfg.batch_size, shuffle=True)

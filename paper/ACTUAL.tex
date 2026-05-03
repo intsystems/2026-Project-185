@@ -966,6 +966,11 @@ basis alongside the weighted residual decay of the Fourier NeuralPOD basis.
 Figure~\ref{fig:basis_modes} shows the first $K$ spatiotemporal mode functions
 for both bases; POD modes are globally supported, while NeuralPOD modes
 adapt their spatial localisation to the data.
+Figure~\ref{fig:basis_modes_nu001} shows the same comparison for $\nu{=}0.01$:
+NeuralPOD modes concentrate near the shock front while POD modes remain globally supported.
+Figure~\ref{fig:basis_reconstruction} compares per-sample reconstructions from
+both bases: ground truth, POD prediction, POD error, Fourier NeuralPOD prediction,
+and Fourier NeuralPOD error.
 
 \begin{figure}[!htbp]
 \centering
@@ -989,6 +994,15 @@ adapt their spatial localisation to the data.
 \caption{First $K$ basis modes on 1D Burgers' ($\nu{=}0.01$):
   POD (\textit{top}) vs.\ Fourier NeuralPOD (\textit{bottom}).}
 \label{fig:basis_modes_nu001}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/basis_reconstruction_nu1.0.png}
+\caption{Phase~1 reconstruction comparison on 1D Burgers' ($\nu{=}1.0$).
+  Each row shows one sample: ground truth, POD reconstruction, $|$POD error$|$,
+  Fourier NeuralPOD reconstruction, $|$FNPOD error$|$.}
+\label{fig:basis_reconstruction}
 \end{figure}
 
 \paragraph{Baseline training curves.}
@@ -1053,9 +1067,9 @@ NeuralPOD-DeepONet on 1D Burgers' ($\nu{=}1.0$).
 \label{fig:npod_reconstruction}
 \end{figure}
 
-\paragraph{TEMPO reconstructions.}
-Figures~\ref{fig:tempo_pod_burgers_rec}--\ref{fig:tempo_npod_darcy_rec}
-show representative predictions from all four TEMPO variants.
+\paragraph{TEMPO reconstructions (1D Burgers').}
+Figures~\ref{fig:tempo_pod_burgers_rec}--\ref{fig:tempo_npod_burgers_rec}
+show representative space--time predictions from the two TEMPO variants on 1D Burgers'.
 
 \begin{figure}[!htbp]
 \centering
@@ -1073,6 +1087,24 @@ show representative predictions from all four TEMPO variants.
 \label{fig:tempo_npod_burgers_rec}
 \end{figure}
 
+\paragraph{TEMPO regime structure (2D Darcy flow, $M{=}5$).}
+Figure~\ref{fig:tempo_phase1_darcy} shows the TEMPO Phase~1 regime structure
+on 2D Darcy flow with $M{=}5$ regimes discovered by EM.
+As in the 1D Burgers' case, regimes span multiple $\beta$ values,
+confirming geometry-driven rather than parameter-driven partition.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{TEMPO/main/figs/TEMPO_phase1_darcy_M5.png}
+\caption{TEMPO regime structure on 2D Darcy flow ($M{=}5$): UMAP coloured
+  by regime assignment (\textit{left}) and by $\beta$ (\textit{right}).}
+\label{fig:tempo_phase1_darcy}
+\end{figure}
+
+\paragraph{TEMPO reconstructions (2D Darcy flow).}
+Figures~\ref{fig:tempo_pod_darcy_rec}--\ref{fig:tempo_npod_darcy_rec}
+show representative predictions from the two TEMPO variants on 2D Darcy flow.
+
 \begin{figure}[!htbp]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_darcy_reconstruct.png}
@@ -1087,18 +1119,6 @@ show representative predictions from all four TEMPO variants.
 \caption{TEMPO(NeuralPOD) on 2D Darcy flow ($M{=}5$). Layout as in
   Figure~\ref{fig:tempo_pod_darcy_rec}.}
 \label{fig:tempo_npod_darcy_rec}
-\end{figure}
-
-\paragraph{TEMPO regime structure (2D Darcy flow, $M{=}5$).}
-Figure~\ref{fig:tempo_phase1_darcy} shows the TEMPO Phase~1 regime structure
-on 2D Darcy flow with $M{=}5$ regimes.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/TEMPO_phase1_darcy_M5.png}
-\caption{TEMPO regime structure on 2D Darcy flow ($M{=}5$): UMAP coloured
-  by regime assignment (\textit{left}) and by $\beta$ (\textit{right}).}
-\label{fig:tempo_phase1_darcy}
 \end{figure}
 
 \clearpage

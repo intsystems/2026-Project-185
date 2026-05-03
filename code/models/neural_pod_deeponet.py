@@ -96,7 +96,6 @@ class NeuralPODDeepONetTrainer:
         K = len(basis.modes)
         assert K > 0, "Run FourierNeuralPODTrainer.train(s_traj, x_flat) first."
 
-        # stack lambda_ten from each mode into (N_traj, K)
         coeffs = torch.stack([m.lambda_ten.detach() for m in basis.modes], dim=1)
 
         device = next(self.model.parameters()).device
@@ -108,22 +107,12 @@ class NeuralPODDeepONetTrainer:
         N, m = u0_sensors.shape
         print(f"NeuralPOD-DeepONet Phase 2 | N={N}, m={m}, K={K}")
 
-        # Precompute val targets: optimal per-mode coefficients for val snapshots
         self.val_history = []
         do_val = val_u0 is not None and val_s is not None and x_flat is not None
         if do_val:
-            with torch.no_grad():
-                mean_d   = basis.mean_net(x_flat)                             # (Nxy,)
-                residual = val_s.to(device) - mean_d.unsqueeze(0)             # (N_val, Nxy)
-                val_tgt_list = []
-                for md in basis.modes:
-                    phi_k    = md.phi(x_flat)                                 # (Nxy,)
-                    phi_sq_k = (phi_k ** 2).sum()
-                    c_k      = (residual @ phi_k) / phi_sq_k                  # (N_val,)
-                    val_tgt_list.append(c_k)
-                    residual = residual - c_k.unsqueeze(1) * phi_k.unsqueeze(0)
-                val_tgt = torch.stack(val_tgt_list, dim=1)                    # (N_val, K)
-            val_sens = val_u0[:, ::stride].to(device)                         # (N_val, m)
+            val_sens  = val_u0[:, ::stride].to(device)
+            val_s_dev = val_s.to(device)
+            x_flat    = x_flat.to(device)
 
         dl = DataLoader(TensorDataset(u0_sensors, targets),
                         batch_size=self.cfg.batch_size, shuffle=True)
@@ -144,16 +133,18 @@ class NeuralPODDeepONetTrainer:
             avg = total / len(dl)
             history.append(avg)
             if do_val and epoch % self.cfg.val_every == 0:
-                self.model.branch.eval()
+                self.model.eval()
                 with torch.no_grad():
-                    vl = F.mse_loss(self.model.branch(val_sens), val_tgt).item()
-                self.model.branch.train()
-                self.val_history.append((epoch, vl))
+                    pred = self.model(val_sens, x_flat)
+                    rel_l2 = ((pred - val_s_dev).norm(dim=1) /
+                              val_s_dev.norm(dim=1).clamp_min(1e-8)).mean().item()
+                self.model.train()
+                self.val_history.append((epoch, rel_l2))
             if epoch % self.cfg.log_every == 0:
-                val_str = f"  val={self.val_history[-1][1]:.4e}" if self.val_history else ""
+                val_str = f"  val_rl2={self.val_history[-1][1]:.4e}" if self.val_history else ""
                 print(f"  epoch {epoch:4d} | coeff_mse={avg:.4e}{val_str}")
 
-        val_str = f"  val={self.val_history[-1][1]:.4e}" if self.val_history else ""
+        val_str = f"  val_rl2={self.val_history[-1][1]:.4e}" if self.val_history else ""
         print(f"  done: final coeff_mse={history[-1]:.4e}{val_str}")
         return history
 

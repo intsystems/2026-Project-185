@@ -42,10 +42,10 @@ class TEMPOConfig:
     eps_large: float = 0.1
     eps_prune: float = 0.01
     eps_conv: float = 0.005
-    heteroscedastic: bool = True   # use relative error in E-step (robust to multi-scale data)
-    kappa_init: bool = False       # initialize regimes from log(kappa) instead of GMM on alpha
-    kappa_prior_weight: float = 1.0  # lambda: weight of beta-prior in E-step log_p
-    kappa_init_noise: float = 0.05  # uniform noise added to initial gamma to break symmetry
+    heteroscedastic: bool = True   # relative error in E-step; robust to multi-scale data
+    kappa_init: bool = False       # init regimes from log(kappa) spacing instead of GMM on alpha
+    kappa_prior_weight: float = 1.0  # weight of beta-prior in E-step log_p
+    kappa_init_noise: float = 0.05  # breaks symmetry so EM runs real iterations
     basis_config: Any = field(default_factory=lambda: PODConfig(max_modes=8))
     basis_factory: Callable = field(default_factory=lambda: pod_factory)
 
@@ -60,13 +60,13 @@ class TEMPOTrainer:
         self.cfg = cfg
         self.trainers: list = []
         self.gamma: Tensor = None      # (N, M)
-        self.pi: Tensor = None         # (M,)
-        self.alpha: Tensor = None      # (N, P_global) — normalized when heteroscedastic
-        self.mu: Tensor = None         # (M, P_global)
-        self.Sigma: Tensor = None      # (M, P_global, P_global)
-        self._w: Tensor = None         # (Ny,) quadrature weights
-        self._s_norm_sq: Tensor = None # (N,) on CPU: ||s^(i)||^2_w per sample
-        self._kappa_centers: Tensor = None  # (M,) log-kappa regime centers (CPU)
+        self.pi: Tensor = None
+        self.alpha: Tensor = None      # (N, P_global); normalized when heteroscedastic
+        self.mu: Tensor = None
+        self.Sigma: Tensor = None
+        self._w: Tensor = None
+        self._s_norm_sq: Tensor = None # (N,) on CPU
+        self._kappa_centers: Tensor = None  # (M,) log-kappa regime centers, CPU
         self._kappa_T: float = None         # temperature for beta-prior in E-step
         self.history_phase1: dict = None
 
@@ -79,20 +79,20 @@ class TEMPOTrainer:
         self._w = torch.ones(Ny, device=s.device, dtype=s.dtype) / Ny
         w_cpu = self._w.cpu()
         self._s_norm_sq = (s.cpu() ** 2 * w_cpu[None, :]).sum(dim=1).clamp(min=1e-10)
-        print("=== Phase 1: global POD ===")
+        print("Phase 1: global POD")
         self.alpha = self._global_pod(s, x, t)
         if self.cfg.heteroscedastic:
             self.alpha = self.alpha / self.alpha.norm(dim=1, keepdim=True).clamp(min=1e-10)
-        print("=== Phase 2: GMM init ===")
+        print("Phase 2: GMM init")
         if self.cfg.kappa_init and kappa is not None:
             self.gamma, self.pi, self.mu, self.Sigma = self._init_gmm_kappa(
                 self.alpha, kappa, s.device)
         else:
             self.gamma, self.pi, self.mu, self.Sigma = self._init_gmm(self.alpha, s.device)
         print(f"  pi={[f'{p:.3f}' for p in self.pi.tolist()]}")
-        print("=== Phase 3: regime bases init ===")
+        print("Phase 3: regime bases init")
         self.trainers = self._init_bases(s, x, t, kappa)
-        print("=== Phase 4: calibrate sigma2 ===")
+        print("Phase 4: calibrate sigma2")
         self._calibrate_sigma2(s, x)
 
     def _calibrate_sigma2(self, s: Tensor, x: Tensor) -> None:

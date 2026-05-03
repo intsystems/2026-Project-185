@@ -113,11 +113,11 @@ class SpatialFourierNN(nn.Module):
                  n_layers: int = 2) -> None:
         super().__init__()
         if scales is not None:
-            # split frequencies evenly across scales; round up for last scale
+            # last scale gets remainder so total sums to num_frequencies
             k = num_frequencies // len(scales)
             Bs = [torch.randn(k, d_x) * s for s in scales[:-1]]
             Bs.append(torch.randn(num_frequencies - k * (len(scales) - 1), d_x) * scales[-1])
-            B = torch.cat(Bs, dim=0)   # (num_frequencies, d_x)
+            B = torch.cat(Bs, dim=0)
         else:
             B = torch.randn(num_frequencies, d_x) * scale
         self.register_buffer("B", B, persistent=False)

@@ -1,0 +1,77 @@
+{
+  "run_name": "npod_deeponet_darcy_beta10.0_v3_no_stride.out",
+  "n_modes": 32,
+  "n_train": 8000,
+  "n_test": 1000,
+  "train_mean": 0.14776960015296936,
+  "train_median": 0.125614196062088,
+  "train_std": 0.08115799725055695,
+  "test_mean": 0.16090698540210724,
+  "test_median": 0.1388671100139618,
+  "test_std": 0.08577138930559158,
+  "test_p95": 0.2839844226837158,
+  "cross_beta": {
+    "0.01": {
+      "mean": 696.8764038085938,
+      "median": 828.4520263671875,
+      "std": 371.5543212890625,
+      "p95": 1110.47998046875
+    },
+    "0.1": {
+      "mean": 87.22930145263672,
+      "median": 95.30633544921875,
+      "std": 23.804519653320312,
+      "p95": 110.15970611572266
+    },
+    "1.0": {
+      "mean": 8.79732894897461,
+      "median": 8.818100929260254,
+      "std": 1.1118966341018677,
+      "p95": 10.137873649597168
+    },
+    "10.0": {
+      "mean": 0.14671969413757324,
+      "median": 0.12456674873828888,
+      "std": 0.07860257476568222,
+      "p95": 0.24586093425750732
+    },
+    "100.0": {
+      "mean": 0.9006572365760803,
+      "median": 0.9017856121063232,
+      "std": 0.0077429707162082195,
+      "p95": 0.9075878858566284
+    }
+  },
+  "hparams": {
+    "beta": 10.0,
+    "run_name": "npod_deeponet_darcy_beta10.0_v3_no_stride.out",
+    "results_dir": "/home/a.bulkin/TEMPO/code/TEMPO_results/darcy",
+    "all_beta": [
+      0.01,
+      0.1,
+      1.0,
+      10.0,
+      100.0
+    ],
+    "n_train": 8000,
+    "n_test": 1000,
+    "max_modes": 32,
+    "n_epochs_mean": 185,
+    "n_epochs_mode": 150,
+    "hidden_dim_basis": 256,
+    "num_frequencies": 96,
+    "scales": [
+      0.5,
+      2.0,
+      6.0
+    ],
+    "n_layers_basis": 3,
+    "hidden_dim": 256,
+    "n_layers": 4,
+    "sensor_stride": 1,
+    "n_epochs": 80000,
+    "batch_size": 1024,
+    "seed": 42,
+    "n_viz": 3
+  }
+}
