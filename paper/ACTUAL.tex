@@ -728,7 +728,7 @@ TEMPO trains jointly on $\beta\in\{0.1,1,10,100\}$ and recovers reasonable
 accuracy across all regimes.
 
 % TABLE 1: Burgers
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \small
 \setlength{\tabcolsep}{5pt}
@@ -769,7 +769,7 @@ TEMPO(NeuralPOD)~\textit{(ours)}
 \end{table}
 
 % TABLE 2: Darcy
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
@@ -832,37 +832,20 @@ weights $\boldsymbol{\pi}{=}(0.324,\,0.267,\,0.409)$ across all $\nu$
 membership is driven by the geometry of~$u_0$, not by~$\nu$.
 
 \paragraph{Regime structure.}
-Figure~\ref{fig:umap_em} confirms regime structure in both the UMAP
-(\textit{left/centre}) and the POD coefficient space (\textit{right}):
-each manifold branch spans multiple~$\nu$, confirming the partition
-reflects solution geometry rather than the physical parameter directly.
+Figure~\ref{fig:umap_em} shows that each manifold branch spans
+multiple~$\nu$ values, confirming the partition reflects solution
+geometry rather than the physical parameter directly.
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/TEMPO_phase1.png}
 \caption{TEMPO regime structure on 1D Burgers' ($M{=}3$, 19 EM iterations).
-  \textit{Left:} UMAP coloured by regime assignment.
-  \textit{Centre:} same embedding coloured by~$\nu$; each branch spans
-  multiple viscosity values.
+  \textit{Left:} UMAP coloured by regime.
+  \textit{Centre:} same embedding coloured by~$\nu$.
   \textit{Right:} GMM fit in POD coefficient space $(\alpha_1,\alpha_2)$;
   stars mark regime centroids~$\mu_m$.}
 \label{fig:umap_em}
 \end{figure}
-
-%==========================================================================
-\subsection{Reconstruction Quality}
-\label{sec:recon_exp}
-%==========================================================================
-
-Figure~\ref{fig:reconstruct} shows a representative space--time prediction
-from TEMPO(NeuralPOD) on 1D Burgers' ($\nu{=}1.0$).
-The prediction closely tracks the ground truth with small, uniformly distributed
-residuals and no systematic error near the diffusive front.
-Additional reconstructions and error distributions for all baselines are
-provided in Appendix~\ref{app:exp}.
-
-
-
 
 \section{Conclusion}
 
@@ -1122,6 +1105,40 @@ on 2D Darcy flow with $M{=}5$ regimes.
 \subsection{Algorithms}\label{app:alg}
 
 \begin{algorithm}[H]
+\caption{\textsc{WeightedNeuralPOD}$\bigl(
+  \{s^{(i)}, \gamma_{im}\}_{i=1}^N,\;
+  \tau\bigr)$}
+\label{alg:npod}
+\begin{algorithmic}[1]
+\State $\bar{s}^{(m)} \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,s^{(i)}$
+  \hfill\Comment{responsibility-weighted mean trajectory}
+\State Train $\phi_0^{(m)}$ by minimizing
+  $\displaystyle\sum_j w_j\bigl(\phi_0^{(m)}(y_j) - \bar{s}^{(m)}_j\bigr)^2$
+\State $r^{(0,i)} \leftarrow s^{(i)} - \phi_0^{(m)}(y)$
+  \enspace for all $i$;\enspace $p \leftarrow 0$
+\State $V_m \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,\|s^{(i)}-\bar{s}^{(m)}\|_w^2$
+  \hfill\Comment{initial unmodeled variance}
+\While{$\displaystyle\sum_{i=1}^N \gamma_{im}\,\|r^{(p,i)}\|_w^2
+  \;\ge\; \tau\, V_m$ \textbf{ and } $p < P_{\max}$}
+  \State Jointly minimize over $\phi_{p+1}^{(m)}$ and
+    $\{\lambda_{p+1}^{(m,i)}\}_{i=1}^N$:
+    \[
+      \sum_{i=1}^N \gamma_{im}
+      \sum_j w_j\!\left(\lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y_j)
+      - r^{(p,i)}_j\right)^{\!2}
+    \]
+  \State $r^{(p+1,i)} \leftarrow r^{(p,i)}
+    - \lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y)$
+    \enspace for all $i$
+  \State $p \leftarrow p + 1$
+\EndWhile
+\State \Return $P_m \!\leftarrow\! p$,\enspace
+  $\phi_0^{(m)}$,\enspace
+  $\bigl\{\phi_p^{(m)},\,\{\lambda_p^{(m,i)}\}_{i=1}^N\bigr\}_{p=1}^{P_m}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
 \caption{TEMPO --- Offline Phase}
 \label{alg:tempo}
 \begin{algorithmic}[1]
@@ -1189,40 +1206,6 @@ on 2D Darcy flow with $M{=}5$ regimes.
   $\Lambda_m^* \!\leftarrow\! \Lambda_m^{(q)}$,\;
   $\gamma_{im}^* \!\leftarrow\! \gamma_{im}^{(q)}$,\;
   $\pi_m^* \!\leftarrow\! \pi_m^{(q)}$
-\end{algorithmic}
-\end{algorithm}
-
-\begin{algorithm}[t]
-\caption{\textsc{WeightedNeuralPOD}$\bigl(
-  \{s^{(i)}, \gamma_{im}\}_{i=1}^N,\;
-  \tau\bigr)$}
-\label{alg:npod}
-\begin{algorithmic}[1]
-\State $\bar{s}^{(m)} \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,s^{(i)}$
-  \hfill\Comment{responsibility-weighted mean trajectory}
-\State Train $\phi_0^{(m)}$ by minimizing
-  $\displaystyle\sum_j w_j\bigl(\phi_0^{(m)}(y_j) - \bar{s}^{(m)}_j\bigr)^2$
-\State $r^{(0,i)} \leftarrow s^{(i)} - \phi_0^{(m)}(y)$
-  \enspace for all $i$;\enspace $p \leftarrow 0$
-\State $V_m \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,\|s^{(i)}-\bar{s}^{(m)}\|_w^2$
-  \hfill\Comment{initial unmodeled variance}
-\While{$\displaystyle\sum_{i=1}^N \gamma_{im}\,\|r^{(p,i)}\|_w^2
-  \;\ge\; \tau\, V_m$ \textbf{ and } $p < P_{\max}$}
-  \State Jointly minimize over $\phi_{p+1}^{(m)}$ and
-    $\{\lambda_{p+1}^{(m,i)}\}_{i=1}^N$:
-    \[
-      \sum_{i=1}^N \gamma_{im}
-      \sum_j w_j\!\left(\lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y_j)
-      - r^{(p,i)}_j\right)^{\!2}
-    \]
-  \State $r^{(p+1,i)} \leftarrow r^{(p,i)}
-    - \lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y)$
-    \enspace for all $i$
-  \State $p \leftarrow p + 1$
-\EndWhile
-\State \Return $P_m \!\leftarrow\! p$,\enspace
-  $\phi_0^{(m)}$,\enspace
-  $\bigl\{\phi_p^{(m)},\,\{\lambda_p^{(m,i)}\}_{i=1}^N\bigr\}_{p=1}^{P_m}$
 \end{algorithmic}
 \end{algorithm}
 
