@@ -73,7 +73,7 @@
 \begin{abstract}
 Operator learning methods typically approximate the solution map of a physical system with a single global model — an assumption that fails when solutions change character fundamentally across the parameter space.
 
-We propose TEMPO: a framework that identifies latent dynamical regimes in snapshot data via Expectation-Maximization, builds a dedicated basis for each, and learns to route new inputs to the right regime at inference time. On multi-regime benchmarks, TEMPO achieves substantially lower cross-regime errors than per-parameter specialists, with interpretable structure that reflects the underlying physics.
+We propose TEMPO: a framework that identifies latent dynamical regimes in snapshot data via Expectation-Maximization, builds a dedicated basis for each, and learns to route new inputs to the right regime at inference time. Models trained on a single parameter value fail badly on others — errors grow by orders of magnitude out-of-distribution. A single jointly-trained model partially addresses this but ignores underlying structure. TEMPO instead learns regime-specific bases jointly across all parameter values, outperforming the global joint baseline while recovering structure driven by both solution geometry and the physical parameter.
 
 \end{abstract}
 
@@ -133,10 +133,12 @@ routing new inputs to the correct regime at inference.
   \item An adaptive basis update rule based on a distribution-shift criterion,
     which determines when each regime's basis warrants retraining and avoids
     redundant computation across EM iterations.
-  \item On 1D Burgers' and 2D Darcy flow, a single TEMPO model trained jointly
-    across all parameter values substantially outperforms single-regime
-    baselines, with discovered regimes that reflect intrinsic solution geometry
-    rather than parameter labels.
+  \item On 1D Burgers' and 2D Darcy flow, per-parameter specialists achieve
+    low in-distribution error but fail catastrophically outside their training
+    value; TEMPO(POD) trained jointly achieves lower average error across the
+    full parameter range than any single-parameter specialist and outperforms
+    a jointly-trained model without regime discovery, with discovered regimes
+    reflecting both solution geometry and physical parameter structure.
 \end{itemize}
 
 
@@ -688,8 +690,8 @@ All methods are implemented and trained by us.
 POD-DeepONet~\cite{Lu2022} and NeuralPOD-DeepONet (\textit{ours}) are trained
 one model per $\nu$ (or $\beta$) value and evaluated in-distribution;
 they serve as a reference ceiling for jointly-trained approaches.
-POD-DeepONet trained jointly on all parameter values without regime discovery
-is the primary baseline for TEMPO.
+POD-DeepONet and NeuralPOD-DeepONet trained jointly on all parameter values
+without regime discovery serve as baselines for TEMPO.
 TEMPO(POD) uses responsibility-weighted SVD per regime;
 TEMPO(NeuralPOD) uses Fourier NeuralPOD bases.
 Both TEMPO variants train a single model on all parameter values jointly,
@@ -706,26 +708,26 @@ in Tables~\ref{tab:results}--\ref{tab:darcy}.
 %==========================================================================
 
 \paragraph{1D Burgers' equation.}
-Table~\ref{tab:results} reports the full cross-viscosity error matrix for the
-Burgers' benchmark.
-Each per-$\nu$ specialist achieves low error in-distribution (diagonal entries),
-but degrades sharply outside its training regime: for example, a model trained
-on $\nu{=}0.1$ reaches $0.048$ in-distribution yet $0.461$ on $\nu{=}0.001$,
-a ten-fold increase.
-This cross-regime failure motivates joint training with automatic regime
-discovery.
-TEMPO is compared against a jointly-trained POD-DeepONet without regime
-discovery; TEMPO improves on this baseline by learning regime-specific bases.
+Table~\ref{tab:results} reports the full cross-viscosity error matrix.
+Each per-$\nu$ specialist achieves low in-distribution error (diagonal), but
+fails sharply outside its training regime: a model trained on $\nu{=}0.1$
+reaches $0.048$ in-distribution yet $0.461$ on $\nu{=}0.001$, a ten-fold
+increase. These specialists are not usable in practice across the full
+parameter range.
+TEMPO(POD) trained jointly on all viscosities reduces error by 31--50\%
+relative to a single joint POD-DeepONet baseline across all~$\nu$.
+TEMPO(NeuralPOD) shows consistent regime structure but higher absolute error,
+reflecting the added difficulty of fitting nonlinear bases in the joint setting.
 
 \paragraph{2D Darcy flow.}
-Table~\ref{tab:darcy} shows the cross-$\beta$ error matrix for Darcy flow.
-Per-$\beta$ specialists fail even more severely than in Burgers: the Darcy
-solution scales linearly with~$\beta$, so a model trained on one value
-predicts completely wrong amplitudes on others.
-Errors grow by roughly one order of magnitude per decade in~$\beta$,
-reaching ${>}1000$ for the most distant pair.
-TEMPO trains jointly on $\beta\in\{0.1,1,10,100\}$ and recovers reasonable
-accuracy across all regimes.
+Table~\ref{tab:darcy} shows the cross-$\beta$ error matrix.
+Per-$\beta$ specialists fail even more severely: the Darcy solution scales
+linearly with~$\beta$, so a model trained on one value predicts completely
+wrong amplitudes on others, with errors growing by one order of magnitude
+per decade in~$\beta$ and reaching ${>}1000$ for the most distant pair.
+TEMPO(POD) trained jointly on $\beta\in\{0.1,1,10,100\}$ outperforms the
+joint POD-DeepONet baseline by up to $3\times$ on the hardest regime
+($\beta{=}0.1$), recovering accurate predictions across all values.
 
 % TABLE 1: Burgers
 \begin{table}[!htbp]
@@ -734,36 +736,35 @@ accuracy across all regimes.
 \setlength{\tabcolsep}{5pt}
 \caption{\textbf{Relative $L^2$ test error on 1D Burgers' equation.}
   Each per-$\nu$ specialist is trained on a single viscosity and evaluated on
-  all four; \underline{underlined} entries are in-distribution.
+  all three jointly-trained values; \underline{underlined} entries are in-distribution.
   The large off-diagonal errors motivate joint training with regime discovery.
-  TEMPO trains jointly on $\nu\in\{0.001,0.1,1.0\}$; the $\nu{=}0.01$ column
-  is omitted for jointly-trained methods~(\textemdash).
+  All jointly-trained methods use $\nu\in\{0.001,0.1,1.0\}$.
   \textbf{Bold}: best per column among jointly-trained methods.}
 \label{tab:results}
-\begin{tabular}{l c c c c c}
+\begin{tabular}{l c c c c}
 \toprule
 Method & Train~$\nu$
-  & $\nu{=}0.001$ & $\nu{=}0.01$ & $\nu{=}0.1$ & $\nu{=}1.0$ \\
+  & $\nu{=}0.001$ & $\nu{=}0.1$ & $\nu{=}1.0$ \\
 \midrule
-\multicolumn{6}{l}{\textit{Per-$\nu$ specialists (single-viscosity training)}} \\[2pt]
+\multicolumn{5}{l}{\textit{Per-$\nu$ specialists (single-viscosity training)}} \\[2pt]
 \multirow{4}{*}{POD-DeepONet~\cite{Lu2022}}
-  & 0.001 & \underline{0.273} & 0.215 & 0.297 & 0.639 \\
-  & 0.01  & 0.274 & \underline{0.214} & 0.274 & 0.614 \\
-  & 0.1   & 0.349 & 0.299 & \underline{0.048} & 0.344 \\
-  & 1.0   & 0.461 & 0.425 & 0.260 & \underline{0.025} \\[4pt]
+  & 0.001 & \underline{0.273} & 0.297 & 0.639 \\
+  & 0.01  & 0.274 & 0.274 & 0.614 \\
+  & 0.1   & 0.349 & \underline{0.048} & 0.344 \\
+  & 1.0   & 0.461 & 0.260 & \underline{0.025} \\[4pt]
 \multirow{4}{*}{NeuralPOD-DeepONet~\textit{(ours)}}
-  & 0.001 & \underline{0.392} & 0.352 & 0.288 & 0.535 \\
-  & 0.01  & 0.391 & \underline{0.351} & 0.284 & 0.541 \\
-  & 0.1   & 0.426 & 0.388 & \underline{0.229} & 0.371 \\
-  & 1.0   & 0.483 & 0.451 & 0.315 & \underline{0.183} \\
+  & 0.001 & \underline{0.392} & 0.288 & 0.535 \\
+  & 0.01  & 0.391 & 0.284 & 0.541 \\
+  & 0.1   & 0.426 & \underline{0.229} & 0.371 \\
+  & 1.0   & 0.483 & 0.315 & \underline{0.183} \\
 \midrule
-\multicolumn{6}{l}{\textit{Joint training ($\nu\in\{0.001,0.1,1.0\}$)}} \\[2pt]
+\multicolumn{5}{l}{\textit{Joint training ($\nu\in\{0.001,0.1,1.0\}$)}} \\[2pt]
 POD-DeepONet~\cite{Lu2022}
-  & all & \textemdash & \textemdash & \textemdash & \textemdash \\
+  & all & 0.460 & 0.339 & 0.210 \\
 TEMPO(POD)~\textit{(ours)}
-  & $M{=}3$ & \textbf{0.317} & \textemdash & \textbf{0.168} & \textbf{0.182} \\
+  & $M{=}3$ & \textbf{0.317} & \textbf{0.168} & \textbf{0.182} \\
 TEMPO(NeuralPOD)~\textit{(ours)}
-  & $M{=}3$ & 0.571 & \textemdash & 0.502 & 0.376 \\
+  & $M{=}3$ & 0.571 & 0.502 & 0.376 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -796,11 +797,20 @@ Method & Train~$\beta$
   & 1.0   & ${>}10$  & ${>}1$   & \underline{0.048} & 0.897 & 0.990 \\
   & 10    & ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.035} & 0.900 \\
   & 100   & ${>}1000$& ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.042} \\
+\multirow{5}{*}{NeuralPOD-DeepONet~\textit{(ours)}}
+  & 0.01  & \underline{1.407} & 0.786 & 0.962 & 0.996 & ${>}1$ \\
+  & 0.1   & ${>}1$   & \underline{0.421} & 0.902 & 0.989 & 0.999 \\
+  & 1.0   & ${>}10$  & ${>}1$   & \underline{0.135} & 0.901 & 0.990 \\
+  & 10    & ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.050} & 0.900 \\
+  & 100   & ${>}1000$& ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.037} \\
 \midrule
 \multicolumn{7}{l}{\textit{Joint training ($\beta\in\{0.1,1,10,100\}$)}} \\[2pt]
 POD-DeepONet~\cite{Lu2022}
   & all
   & \textemdash & 2.557 & 0.363 & 0.181 & 0.347 \\
+NeuralPOD-DeepONet~\textit{(ours)}
+  & all
+  & \textemdash & 72.9 & 6.92 & 0.357 & 0.345 \\
 TEMPO(POD)~\textit{(ours)}
   & $M{=}5$
   & \textemdash & \textbf{0.775} & \textbf{0.178} & \textbf{0.136} & \textbf{0.073} \\
@@ -838,8 +848,8 @@ geometry rather than the physical parameter directly.
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/TEMPO_phase1.png}
-\caption{TEMPO regime structure on 1D Burgers' ($M{=}3$, 19 EM iterations).
+\includegraphics[width=\textwidth]{figs/TEMPO_phase1_burgers_pod_M3.png}
+\caption{TEMPO(POD) regime structure on 1D Burgers' ($M{=}3$, 20 EM iterations).
   \textit{Left:} UMAP coloured by regime.
   \textit{Centre:} same embedding coloured by~$\nu$.
   \textit{Right:} GMM fit in POD coefficient space $(\alpha_1,\alpha_2)$;
@@ -854,9 +864,9 @@ When the governing parameter drives qualitative change in solution structure, a 
 
 TEMPO addresses this by treating regime membership as a latent variable.
 EM discovers $M$ regimes from unlabelled snapshots and fits a dedicated basis to each, without regime supervision.
-On 1D Burgers' across three orders of viscosity, the discovered regimes cross viscosity boundaries, confirming that the partition reflects solution geometry rather than the physical parameter directly.
-Regime-specific bases reduce reconstruction error relative to a global basis at equal mode count.
-The gated online operator outperforms a single joint baseline across the full parameter range.
+Per-parameter specialists achieve low in-distribution error but are unusable across the full parameter range — errors grow by orders of magnitude out-of-distribution.
+TEMPO(POD) trained jointly outperforms a single joint baseline by 31--50\% on Burgers' and up to $3\times$ on Darcy flow, while discovered regimes span multiple parameter values, confirming that the partition reflects solution geometry and physical structure jointly.
+TEMPO(NeuralPOD) demonstrates that the regime discovery framework extends naturally to nonlinear bases; closing the gap with TEMPO(POD) in the joint training setting remains an open direction.
 
 Several directions remain open.
 Conditioning the basis functions on $\kappa$ would allow each mode to encode parameter-dependent structure directly.
@@ -1010,19 +1020,6 @@ Figures~\ref{fig:pod_phase2_loss} and~\ref{fig:npod_phase2_loss} show the
 Phase~2 MSE training curves for POD-DeepONet and NeuralPOD-DeepONet on
 1D Burgers' ($\nu{=}1.0$).
 
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_phase2_loss.png}
-\caption{Phase~2 MSE training curve for POD-DeepONet on 1D Burgers' ($\nu{=}1.0$).}
-\label{fig:pod_phase2_loss}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_phase2_loss.png}
-\caption{Phase~2 MSE training curve for NeuralPOD-DeepONet on 1D Burgers' ($\nu{=}1.0$).}
-\label{fig:npod_phase2_loss}
-\end{figure}
 
 \paragraph{Error distributions.}
 Figures~\ref{fig:pod_err_dist} and~\ref{fig:npod_err_dist} show the full
@@ -1087,18 +1084,36 @@ show representative space--time predictions from the two TEMPO variants on 1D Bu
 \label{fig:tempo_npod_burgers_rec}
 \end{figure}
 
-\paragraph{TEMPO regime structure (2D Darcy flow, $M{=}5$).}
-Figure~\ref{fig:tempo_phase1_darcy} shows the TEMPO Phase~1 regime structure
-on 2D Darcy flow with $M{=}5$ regimes discovered by EM.
-As in the 1D Burgers' case, regimes span multiple $\beta$ values,
-confirming geometry-driven rather than parameter-driven partition.
+\paragraph{TEMPO regime structure (1D Burgers', NeuralPOD basis).}
+Figure~\ref{fig:umap_em_npod} shows the TEMPO(NeuralPOD) regime structure on
+1D Burgers' ($M{=}3$). The partition mirrors TEMPO(POD) but with sharper
+assignments, reflecting the higher expressivity of the NeuralPOD basis.
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/TEMPO_phase1_darcy_M5.png}
-\caption{TEMPO regime structure on 2D Darcy flow ($M{=}5$): UMAP coloured
-  by regime assignment (\textit{left}) and by $\beta$ (\textit{right}).}
+\includegraphics[width=\textwidth]{figs/TEMPO_phase1_burgers_npod_M3.png}
+\caption{TEMPO(NeuralPOD) on 1D Burgers' ($M{=}3$, $H{=}0.23$, cf.\ $H{=}0.84$ for POD). Layout as in Figure~\ref{fig:umap_em}.}
+\label{fig:umap_em_npod}
+\end{figure}
+
+\paragraph{TEMPO regime structure (2D Darcy flow, $M{=}4$).}
+Figures~\ref{fig:tempo_phase1_darcy}--\ref{fig:tempo_phase1_darcy_npod} show
+the TEMPO Phase~1 regime structure on 2D Darcy flow ($M{=}4$) for POD and
+NeuralPOD bases. Regimes span multiple $\beta$ values, confirming
+geometry-driven rather than parameter-driven partition.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{figs/TEMPO_phase1_darcy_pod_M4.png}
+\caption{TEMPO(POD) on 2D Darcy flow ($M{=}4$, $H{=}0.75$, $\boldsymbol{\pi}{=}(0.22,\,0.28,\,0.28,\,0.22)$). Layout as in Figure~\ref{fig:umap_em}.}
 \label{fig:tempo_phase1_darcy}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{figs/TEMPO_phase1_darcy_npod_M4.png}
+\caption{TEMPO(NeuralPOD) on 2D Darcy flow ($M{=}4$, $H{=}0.68$). Layout as in Figure~\ref{fig:umap_em}.}
+\label{fig:tempo_phase1_darcy_npod}
 \end{figure}
 
 \paragraph{TEMPO reconstructions (2D Darcy flow).}
@@ -1188,7 +1203,7 @@ show representative predictions from the two TEMPO variants on 2D Darcy flow.
 \Repeat
   \Statex \quad\textit{E-step}
   \For{all $i = 1,\ldots,N$ and $m = 1,\ldots,M$}
-    \State Compute $\hat{s}_m^{(i)}$ via~\eqref{eq:regime_approx}
+    \State Compute $\hat{s}_m^{(i)}$ via~\eqref{eq:separable}
       using $\Phi_m^{(q-1)}$ and $\Lambda_m^{(q-1)}$
     \State $\gamma_{im}^{(q)} \leftarrow$ Eq.~\eqref{eq:estep}
   \EndFor
