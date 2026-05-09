@@ -1,0 +1,65 @@
+{
+  "run_name": "fno_smoketest",
+  "n_params": 2410177,
+  "n_train": 64,
+  "n_test": 32,
+  "train_mean": 0.8985958695411682,
+  "train_median": 0.8765121102333069,
+  "train_std": 0.05968264490365982,
+  "test_mean": 0.8983190059661865,
+  "test_median": 0.8838204145431519,
+  "test_std": 0.05987410992383957,
+  "test_p95": 1.0033140182495117,
+  "cross_nu": {
+    "0.001": {
+      "mean": 0.9281696677207947,
+      "median": 0.9257426261901855,
+      "std": 0.06644151359796524,
+      "p95": 1.0354231595993042
+    },
+    "0.01": {
+      "mean": 0.9207969903945923,
+      "median": 0.9037776589393616,
+      "std": 0.06716828793287277,
+      "p95": 1.0397402048110962
+    },
+    "0.1": {
+      "mean": 0.9064712524414062,
+      "median": 0.8814135789871216,
+      "std": 0.06197529658675194,
+      "p95": 1.0297632217407227
+    },
+    "1.0": {
+      "mean": 0.8695937991142273,
+      "median": 0.8521683216094971,
+      "std": 0.045146942138671875,
+      "p95": 0.969184398651123
+    }
+  },
+  "hparams": {
+    "nu": 0.1,
+    "run_name": "fno_smoketest",
+    "results_dir": "/Users/rknza/research/m1p/project/code/TEMPO_results/burgers",
+    "all_nu": [
+      0.001,
+      0.01,
+      0.1,
+      1.0
+    ],
+    "n_train": 64,
+    "n_test": 32,
+    "data_dir": "/Users/rknza/data/1D/Burgers/Train",
+    "n_modes_x": 16,
+    "n_modes_t": 16,
+    "hidden_dim": 64,
+    "n_layers": 4,
+    "n_epochs": 2,
+    "batch_size": 8,
+    "lr": 0.001,
+    "lr_step": 100,
+    "lr_gamma": 0.5,
+    "log_every": 1,
+    "seed": 42,
+    "n_viz": 2
+  }
+}

@@ -39,7 +39,7 @@ def parse_args():
     p.add_argument("--run_name",        type=str,   default=None)
     p.add_argument("--results_dir",     type=str,   default=str(_PROJECT_ROOT / "TEMPO_results" / "darcy"))
     p.add_argument("--beta_values",     type=float, nargs="+", default=[0.1, 1.0, 10.0, 100.0])
-    p.add_argument("--n_samples",       type=int,   default=8000, help="Samples per beta (train+test)")
+    p.add_argument("--n_samples",       type=int,   default=10000, help="Samples per beta (train+test)")
     p.add_argument("--n_test_per_beta", type=int,   default=1000)
     p.add_argument("--data_dir",        type=str,   default=os.path.expanduser("~/data/2D/DarcyFlow"))
     # Fourier basis

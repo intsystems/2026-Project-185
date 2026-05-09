@@ -37,7 +37,7 @@ def parse_args():
     p.add_argument("--run_name",     type=str,   default=None)
     p.add_argument("--results_dir",  type=str,   default=str(_PROJECT_ROOT / "TEMPO_results" / "darcy"))
     p.add_argument("--all_beta",     type=float, nargs="+", default=[0.01, 0.1, 1.0, 10.0, 100.0])
-    p.add_argument("--n_train",      type=int,   default=8000)
+    p.add_argument("--n_train",      type=int,   default=9000)
     p.add_argument("--n_test",       type=int,   default=1000)
     p.add_argument("--max_modes",    type=int,   default=32)
     p.add_argument("--hidden_dim",   type=int,   default=256)

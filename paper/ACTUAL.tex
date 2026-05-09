@@ -696,8 +696,6 @@ TEMPO(POD) uses responsibility-weighted SVD per regime;
 TEMPO(NeuralPOD) uses Fourier NeuralPOD bases.
 Both TEMPO variants train a single model on all parameter values jointly,
 taking $(u_0, \kappa)$ as input at inference.
-
-\paragraph{Metric.}
 All methods are evaluated by the mean relative $L^2$ error $\varepsilon$
 defined in~\eqref{eq:metric}, computed per parameter value and reported
 in Tables~\ref{tab:results}--\ref{tab:darcy}.
@@ -708,26 +706,24 @@ in Tables~\ref{tab:results}--\ref{tab:darcy}.
 %==========================================================================
 
 \paragraph{1D Burgers' equation.}
-Table~\ref{tab:results} reports the full cross-viscosity error matrix.
-Each per-$\nu$ specialist achieves low in-distribution error (diagonal), but
-fails sharply outside its training regime: a model trained on $\nu{=}0.1$
-reaches $0.048$ in-distribution yet $0.461$ on $\nu{=}0.001$, a ten-fold
-increase. These specialists are not usable in practice across the full
-parameter range.
-TEMPO(POD) trained jointly on all viscosities reduces error by 31--50\%
-relative to a single joint POD-DeepONet baseline across all~$\nu$.
-TEMPO(NeuralPOD) shows consistent regime structure but higher absolute error,
-reflecting the added difficulty of fitting nonlinear bases in the joint setting.
+Table~\ref{tab:results} gives the cross-viscosity error matrix.
+Per-$\nu$ specialists are unviable across the full range: a $\nu{=}0.1$
+model degrades from $0.048$ to $0.461$ at $\nu{=}0.001$.
+TEMPO(POD) addresses this by discovering regime structure jointly,
+outperforming the global joint baseline by 13--50\% across all~$\nu$.
+TEMPO(NeuralPOD) recovers the same regimes but does not surpass the joint
+baseline, suggesting nonlinear basis fitting remains harder in the
+multi-regime setting.
 
 \paragraph{2D Darcy flow.}
-Table~\ref{tab:darcy} shows the cross-$\beta$ error matrix.
-Per-$\beta$ specialists fail even more severely: the Darcy solution scales
-linearly with~$\beta$, so a model trained on one value predicts completely
-wrong amplitudes on others, with errors growing by one order of magnitude
-per decade in~$\beta$ and reaching ${>}1000$ for the most distant pair.
-TEMPO(POD) trained jointly on $\beta\in\{0.1,1,10,100\}$ outperforms the
-joint POD-DeepONet baseline by up to $3\times$ on the hardest regime
-($\beta{=}0.1$), recovering accurate predictions across all values.
+Table~\ref{tab:darcy} gives the cross-$\beta$ matrix.
+Specialist failure is catastrophic --- Darcy solutions scale linearly
+with~$\beta$, driving cross-parameter errors beyond $1000$.
+TEMPO(POD) reduces error by $3$--$5\times$ over the joint baseline
+(e.g., $\beta{=}0.1$: $0.775$ vs.\ $2.557$; $\beta{=}100$: $0.073$
+vs.\ $0.347$).
+TEMPO(NeuralPOD) recovers dramatically over its non-regime baseline
+($\beta{=}0.1$: $3.813$ vs.\ $72.9$) but does not match TEMPO(POD).
 
 % TABLE 1: Burgers
 \begin{table}[!htbp]
@@ -826,25 +822,12 @@ TEMPO(NeuralPOD)~\textit{(ours)}
 \label{sec:regime_exp}
 %==========================================================================
 
-\paragraph{Number of regimes.}
-We select $M{=}3$ based on BIC and an entropy elbow: the mean assignment
-entropy $H$ gains $+0.30$ from $M{=}2$ to $M{=}3$ but only $+0.18$ from
-$M{=}3$ to $M{=}4$, indicating the third regime captures genuine structure
-that a fourth does not (Table~\ref{tab:regime_selection},
-Appendix~\ref{app:exp}).
-The UMAP embedding (Figure~\ref{fig:umap_em}) confirms three distinct manifold
-branches, one per discovered regime.
-
-\paragraph{Gating structure.}
-The per-viscosity EM responsibilities closely match the global mixture
-weights $\boldsymbol{\pi}{=}(0.324,\,0.267,\,0.409)$ across all $\nu$
-(Table~\ref{tab:gating}, Appendix~\ref{app:exp}), confirming that regime
-membership is driven by the geometry of~$u_0$, not by~$\nu$.
-
-\paragraph{Regime structure.}
-Figure~\ref{fig:umap_em} shows that each manifold branch spans
-multiple~$\nu$ values, confirming the partition reflects solution
-geometry rather than the physical parameter directly.
+We select $M{=}3$ based on BIC and an entropy elbow: $H$ gains $+0.30$
+from $M{=}2$ to $M{=}3$ but only $+0.18$ from $M{=}3$ to $M{=}4$,
+indicating the third regime captures genuine structure that a fourth does
+not (Table~\ref{tab:regime_selection}, Appendix~\ref{app:exp}).
+Figure~\ref{fig:umap_em} confirms three distinct manifold branches, one
+per discovered regime.
 
 \begin{figure}[!htbp]
 \centering
@@ -856,6 +839,17 @@ geometry rather than the physical parameter directly.
   stars mark regime centroids~$\mu_m$.}
 \label{fig:umap_em}
 \end{figure}
+
+Each regime corresponds to a geometric type of initial condition~$u_0$
+that appears across all viscosity values.
+The per-viscosity gating weights
+(Table~\ref{tab:gating}, Appendix~\ref{app:exp}) are nearly uniform across
+$\nu\in\{0.001,0.1,1.0\}$, closely matching the global weights
+$\boldsymbol{\pi}{=}(0.324,\,0.267,\,0.409)$: knowing~$\nu$ alone does not
+predict regime membership.
+Within each regime,~$\nu$ shapes the dynamics: the same initial geometry
+yields a shock at $\nu{=}0.001$ and a smooth wave at $\nu{=}1.0$.
+At inference,~$\nu$ is passed to the branch network as a conditioning input.
 
 \section{Conclusion}
 
@@ -872,6 +866,9 @@ Several directions remain open.
 Conditioning the basis functions on $\kappa$ would allow each mode to encode parameter-dependent structure directly.
 Extending TEMPO to higher-dimensional benchmarks will test whether regime discovery generalises beyond one-dimensional shock dynamics.
 Convergence guarantees for Generalized EM under nonlinear basis parameterisation remain an open theoretical problem.
+
+
+\clearpage
 
 \bibliographystyle{unsrtnat}
 \bibliography{references}

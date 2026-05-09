@@ -36,7 +36,7 @@ def parse_args():
 
     # Data
     p.add_argument("--nu_values",     type=float, nargs="+", default=[0.001, 0.1, 1.0])
-    p.add_argument("--n_samples",     type=int,   default=5000)
+    p.add_argument("--n_samples",     type=int,   default=9500)
     p.add_argument("--n_test_per_nu", type=int,   default=1000)
     p.add_argument("--data_dir",      type=str,
                    default=os.path.expanduser("~/data/1D/Burgers/Train"))
@@ -67,8 +67,8 @@ def parse_args():
 
     # Online phase (TEMPOOnlineConfig)
     p.add_argument("--online_lr",         type=float, default=3e-4)
-    p.add_argument("--online_epochs",     type=int,   default=1200)
-    p.add_argument("--online_batch",      type=int,   default=16)
+    p.add_argument("--online_epochs",     type=int,   default=170)
+    p.add_argument("--online_batch",      type=int,   default=32)
     p.add_argument("--online_hidden_dim", type=int,   default=128)
     p.add_argument("--online_n_layers",   type=int,   default=4)
     p.add_argument("--sensor_stride",     type=int,   default=1)
@@ -192,29 +192,6 @@ def main():
         plt.tight_layout()
         plt.savefig(os.path.join(RUN_DIR, "em_convergence.png"), dpi=150, bbox_inches="tight")
         plt.close()
-
-    # UMAP visualization
-    if not args.skip_umap:
-        try:
-            from utils.plotting import plot_umap_regimes
-            rng_umap = np.random.default_rng(args.seed)
-            idx_umap = rng_umap.choice(len(s), min(args.n_umap, len(s)), replace=False)
-            plot_umap_regimes(
-                alpha=trainer.alpha[idx_umap].cpu().numpy(),
-                mu=trainer.mu.cpu().numpy(),
-                Sigma=trainer.Sigma.cpu().numpy(),
-                hard_labels=trainer.gamma[idx_umap].argmax(dim=1).cpu().numpy(),
-                param_vals=kappa[idx_umap, 0].cpu().numpy(),
-                regime_colors=regime_colors,
-                param_label="nu",
-                title="Burgers trajectories - TEMPO EM regime structure",
-                save_path=os.path.join(RUN_DIR, "TEMPO_phase1.png"),
-                seed=args.seed,
-            )
-        except ImportError:
-            print("umap-learn not installed, skipping UMAP plot")
-        except Exception as e:
-            print(f"UMAP failed: {e}")
 
     # --- Phase 2: Online gated operator ---
     print("=== Phase 2: Online gated operator ===")
@@ -423,6 +400,29 @@ def main():
         json.dump(metrics, f, indent=2)
 
     print(f"Saved to {os.path.abspath(RUN_DIR)}")
+
+    # UMAP visualization (after all results saved)
+    if not args.skip_umap:
+        try:
+            from utils.plotting import plot_umap_regimes
+            rng_umap = np.random.default_rng(args.seed)
+            idx_umap = rng_umap.choice(len(s), min(args.n_umap, len(s)), replace=False)
+            plot_umap_regimes(
+                alpha=trainer.alpha[idx_umap].cpu().numpy(),
+                mu=trainer.mu.cpu().numpy(),
+                Sigma=trainer.Sigma.cpu().numpy(),
+                hard_labels=trainer.gamma[idx_umap].argmax(dim=1).cpu().numpy(),
+                param_vals=kappa[idx_umap, 0].cpu().numpy(),
+                regime_colors=regime_colors,
+                param_label="nu",
+                title="Burgers trajectories - TEMPO EM regime structure",
+                save_path=os.path.join(RUN_DIR, "TEMPO_phase1.png"),
+                seed=args.seed,
+            )
+        except ImportError:
+            print("umap-learn not installed, skipping UMAP plot")
+        except Exception as e:
+            print(f"UMAP failed: {e}")
 
 
 if __name__ == "__main__":

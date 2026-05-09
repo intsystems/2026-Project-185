@@ -34,8 +34,8 @@ def parse_args():
     p.add_argument("--run_name",        type=str,   default=None)
     p.add_argument("--results_dir",     type=str,   default=str(_PROJECT_ROOT / "TEMPO_results" / "burgers"))
     p.add_argument("--all_nu",          type=float, nargs="+", default=[0.001, 0.01, 0.1, 1.0])
-    p.add_argument("--n_train",         type=int,   default=2500)
-    p.add_argument("--n_test",          type=int,   default=500)
+    p.add_argument("--n_train",         type=int,   default=8500)
+    p.add_argument("--n_test",          type=int,   default=1000)
     # Fourier basis
     p.add_argument("--max_modes",       type=int,   default=32)
     p.add_argument("--n_epochs_mean",   type=int,   default=800)
