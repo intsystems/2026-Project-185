@@ -1,0 +1,36 @@
+{
+  "run_name": "pod_deeponet_joint_burgers_v1",
+  "n_modes": 32,
+  "n_train": 160,
+  "n_test": 40,
+  "overall_mean": 0.985379695892334,
+  "overall_median": 1.002106785774231,
+  "overall_std": 0.0733034759759903,
+  "nu0.001_mean": 0.9692012071609497,
+  "nu0.001_median": 0.9516723155975342,
+  "nu0.001_std": 0.0631047710776329,
+  "nu0.010_mean": 1.0015581846237183,
+  "nu0.010_median": 1.0282026529312134,
+  "nu0.010_std": 0.07900065928697586,
+  "hparams": {
+    "nu_values": [
+      0.001,
+      0.01
+    ],
+    "run_name": null,
+    "results_dir": "/Users/rknza/research/m1p/project/code/TEMPO_results/burgers",
+    "n_samples": 100,
+    "n_test_per_nu": 20,
+    "data_dir": "/Users/rknza/data/1D/Burgers/Train",
+    "max_modes": 32,
+    "hidden_dim": 256,
+    "n_layers": 4,
+    "sensor_stride": 1,
+    "n_epochs": 5,
+    "batch_size": 1024,
+    "lr": 0.0003,
+    "log_every": 100,
+    "seed": 39,
+    "n_viz": 3
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "run_name": "cno_burgers_nu0.1_v1",
+  "n_params": 134245,
+  "n_train": 400,
+  "n_test": 100,
+  "train_mean": 0.5299886465072632,
+  "train_median": 0.41584423184394836,
+  "train_std": 0.38058197498321533,
+  "test_mean": 0.5409894585609436,
+  "test_median": 0.4196568727493286,
+  "test_std": 0.3634223937988281,
+  "test_p95": 1.1161832809448242,
+  "cross_nu": {
+    "0.001": {
+      "mean": 1.2993122339248657,
+      "median": 0.8971588015556335,
+      "std": 1.4695322513580322,
+      "p95": 3.8311686515808105
+    },
+    "0.01": {
+      "mean": 0.7692901492118835,
+      "median": 0.6110968589782715,
+      "std": 0.5578272938728333,
+      "p95": 1.6758301258087158
+    },
+    "0.1": {
+      "mean": 0.5409894585609436,
+      "median": 0.4196568727493286,
+      "std": 0.3634223937988281,
+      "p95": 1.1161832809448242
+    },
+    "1.0": {
+      "mean": 1.024937391281128,
+      "median": 0.4459472596645355,
+      "std": 2.291449546813965,
+      "p95": 2.42891001701355
+    }
+  },
+  "hparams": {
+    "nu_values": [
+      0.1
+    ],
+    "run_name": null,
+    "results_dir": "/Users/rknza/research/m1p/project/code/TEMPO_results/burgers",
+    "n_samples": 500,
+    "n_test_per_nu": 100,
+    "data_dir": "/Users/rknza/data/1D/Burgers/Train",
+    "size": 128,
+    "n_layers": 3,
+    "n_res": 4,
+    "n_res_neck": 4,
+    "channel_multiplier": 8,
+    "use_bn": false,
+    "n_epochs": 3,
+    "batch_size": 8,
+    "lr": 0.001,
+    "lr_step": 40,
+    "lr_gamma": 0.5,
+    "log_every": 5,
+    "seed": 42,
+    "n_viz": 3
+  }
+}

@@ -752,15 +752,22 @@ Method & Train~$\nu$
   & 0.001 & \underline{0.392} & 0.288 & 0.535 \\
   & 0.01  & 0.391 & 0.284 & 0.541 \\
   & 0.1   & 0.426 & \underline{0.229} & 0.371 \\
-  & 1.0   & 0.483 & 0.315 & \underline{0.183} \\
+  & 1.0   & 0.483 & 0.315 & \underline{0.183} \\[4pt]
+\multirow{4}{*}{FNO~\cite{Li2021}}
+  & 0.001 & \underline{0.426} & 0.529 & 0.623 \\
+  & 0.01  & 0.454 & 0.401 & 0.492 \\
+  & 0.1   & 0.650 & \underline{0.304} & 0.521 \\
+  & 1.0   & 1.161 & 0.919 & \underline{0.158} \\
 \midrule
 \multicolumn{5}{l}{\textit{Joint training ($\nu\in\{0.001,0.1,1.0\}$)}} \\[2pt]
 POD-DeepONet~\cite{Lu2022}
   & all & 0.460 & 0.339 & 0.210 \\
+FNO~\cite{Li2021}
+  & all & 0.427 & 0.298 & 0.202 \\
 TEMPO(POD)~\textit{(ours)}
   & $M{=}3$ & \textbf{0.317} & \textbf{0.168} & \textbf{0.182} \\
 TEMPO(NeuralPOD)~\textit{(ours)}
-  & $M{=}3$ & 0.571 & 0.502 & 0.376 \\
+  & $M{=}3$ & 0.542 & 0.456 & 0.288 \\
 \bottomrule
 \end{tabular}
 \end{table}

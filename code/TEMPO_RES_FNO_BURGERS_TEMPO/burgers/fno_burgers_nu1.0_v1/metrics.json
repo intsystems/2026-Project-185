@@ -1,0 +1,61 @@
+{
+  "run_name": "fno_burgers_nu1.0_v1",
+  "n_params": 603041,
+  "n_train": 8500,
+  "n_test": 1000,
+  "train_mean": 0.16087359189987183,
+  "train_median": 0.08300049602985382,
+  "train_std": 0.19912689924240112,
+  "test_mean": 0.15823790431022644,
+  "test_median": 0.08414669334888458,
+  "test_std": 0.1911018341779709,
+  "test_p95": 0.5771110653877258,
+  "cross_nu": {
+    "0.001": {
+      "mean": 1.16056489944458,
+      "median": 0.9232721328735352,
+      "std": 3.5987963676452637,
+      "p95": 2.044966697692871
+    },
+    "0.01": {
+      "mean": 1.0862878561019897,
+      "median": 0.9124889373779297,
+      "std": 1.5059282779693604,
+      "p95": 2.0629589557647705
+    },
+    "0.1": {
+      "mean": 0.9194108247756958,
+      "median": 0.7874127626419067,
+      "std": 0.6683142185211182,
+      "p95": 1.974186897277832
+    },
+    "1.0": {
+      "mean": 0.15823790431022644,
+      "median": 0.08414669334888458,
+      "std": 0.1911018341779709,
+      "p95": 0.5771110653877258
+    }
+  },
+  "hparams": {
+    "nu_values": [
+      1.0
+    ],
+    "run_name": null,
+    "results_dir": "/home/a.bulkin/TEMPO/code/TEMPO_results/burgers",
+    "n_samples": 9500,
+    "n_test_per_nu": 1000,
+    "data_dir": "/home/a.bulkin/data/1D/Burgers/Train",
+    "n_modes_x": 16,
+    "n_modes_t": 16,
+    "hidden_dim": 32,
+    "n_layers": 4,
+    "n_epochs": 100,
+    "batch_size": 128,
+    "lr": 0.001,
+    "lr_step": 40,
+    "lr_gamma": 0.5,
+    "log_every": 5,
+    "seed": 42,
+    "n_viz": 3
+  }
+}
