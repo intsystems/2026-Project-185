@@ -190,3 +190,141 @@ def load_darcy_stacked(
     xy_np  = np.stack([xx.ravel(), yy.ravel()], axis=1).astype(np.float32)  # (Nxy, 2)
 
     return s, a, kappa, xy_np, Nx, Ny
+
+
+def load_ns_stacked(
+    entries: list[tuple[int, str]],
+    n_samples: int = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int, int]:
+    """Stack 2D Navier-Stokes NPZ files into pre-allocated arrays.
+
+    Each file: velocity (N, Nt, Nx, Ny, 2) trajectories with 2 velocity components.
+
+    Returns:
+      s     (N_total, Nt*Nx*Ny*2) - full velocity trajectory flattened
+      u0    (N_total, Nx*Ny*2) - initial velocity field flattened
+      kappa (N_total,) - Reynolds number per sample
+      xy    (Nx*Ny, 2) - spatial grid coordinates
+      Nx, Ny, Nt - grid and time dimensions
+    """
+    _MAX_PER_RE = 9500  # hard cap per Reynolds number
+
+    _, path0 = entries[0]
+    data0 = np.load(path0)
+    vel0 = data0["velocity"]  # (N_file, Nt, Nx, Ny, 2)
+    shape = vel0.shape
+    Nt, Nx, Ny = shape[1], shape[2], shape[3]
+    n_file = shape[0]
+
+    n_want  = min(n_samples, _MAX_PER_RE, n_file) if n_samples is not None else min(_MAX_PER_RE, n_file)
+    # Load a few extra rows to ensure n_want clean samples after filtering
+    n_load  = min(n_want + 50, n_file)
+    n_total = n_want * len(entries)
+    Nxy     = Nx * Ny
+    Nxyt    = Nt * Nxy
+
+    print(f"NS: Nx={Nx}, Ny={Ny}, Nt={Nt}, n_per_re={n_want}, "
+          f"N_total={n_total}, s≈{n_total*Nxyt*2*4/1e9:.1f} GB")
+
+    s     = np.empty((n_total, Nxyt * 2), dtype=np.float32)
+    u0    = np.empty((n_total, Nxy * 2), dtype=np.float32)
+    kappa = np.empty(n_total, dtype=np.float32)
+
+    pos = 0
+    for re_val, path in entries:
+        data = np.load(path)
+        vel = data["velocity"][:n_load]  # load a buffer
+
+        # Drop NaN / inf / diverged samples (rare spectral-solver instability)
+        finite_mask = np.isfinite(vel).all(axis=(1, 2, 3, 4))
+        mag_mask    = np.abs(vel).max(axis=(1, 2, 3, 4)) < 1e3
+        valid = finite_mask & mag_mask
+        if not valid.all():
+            n_bad = int((~valid).sum())
+            print(f"  Re={re_val}: dropping {n_bad} bad samples "
+                  f"({(~finite_mask).sum()} non-finite, {(~mag_mask & finite_mask).sum()} diverged)")
+            vel = vel[valid]
+
+        # Keep exactly n_want samples
+        vel = vel[:n_want]
+        n_loaded = len(vel)
+
+        u0_batch = vel[:, 0, :, :, :].reshape(n_loaded, Nxy * 2).astype(np.float32)
+        s_batch  = vel.reshape(n_loaded, Nxyt * 2).astype(np.float32)
+
+        s[pos:pos + n_loaded]  = s_batch
+        u0[pos:pos + n_loaded] = u0_batch
+        kappa[pos:pos + n_loaded] = float(re_val)
+        pos += n_loaded
+        del vel, u0_batch, s_batch
+        print(f"  Re={re_val}: {n_loaded} trajectories loaded")
+
+    # Trim pre-allocated arrays to actual size
+    s     = s[:pos]
+    u0    = u0[:pos]
+    kappa = kappa[:pos]
+
+    # Create spatial grid
+    x_np = np.linspace(0, 1, Nx, dtype=np.float32)
+    y_np = np.linspace(0, 1, Ny, dtype=np.float32)
+    xx, yy = np.meshgrid(x_np, y_np, indexing="ij")  # (Nx, Ny) each
+    xy_np = np.stack([xx.ravel(), yy.ravel()], axis=1).astype(np.float32)  # (Nxy, 2)
+
+    return s, u0, kappa, xy_np, Nx, Ny, Nt
+
+
+def load_ns_1d_stacked(
+    entries: list[tuple[int, str]],
+    n_samples: int = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]:
+    """Stack 1D Navier-Stokes NPZ files into pre-allocated arrays.
+
+    Each file: velocity (N, Nt, Nx) trajectories.
+
+    Returns:
+      s     (N_total, Nt*Nx) - full velocity trajectory flattened
+      u0    (N_total, Nx) - initial velocity field
+      kappa (N_total,) - Reynolds number per sample
+      x_np  (Nx,) - spatial grid coordinates
+      Nx, Nt - grid and time dimensions
+    """
+    _, path0 = entries[0]
+    data0 = np.load(path0)
+    vel0 = data0["velocity"]  # (N_file, Nt, Nx)
+    shape = vel0.shape
+    Nt, Nx = shape[1], shape[2]
+    n_file = shape[0]
+
+    n_per = min(n_samples, n_file) if n_samples is not None else n_file
+    n_total = n_per * len(entries)
+    Nxt = Nt * Nx
+
+    print(f"NS-1D: Nx={Nx}, Nt={Nt}, n_per_re={n_per}, "
+          f"N_total={n_total}, s≈{n_total*Nxt*4/1e9:.1f} GB")
+
+    s = np.empty((n_total, Nxt), dtype=np.float32)
+    u0 = np.empty((n_total, Nx), dtype=np.float32)
+    kappa = np.empty(n_total, dtype=np.float32)
+
+    for i, (re_val, path) in enumerate(entries):
+        data = np.load(path)
+        vel = data["velocity"][:n_per]  # (n_per, Nt, Nx)
+
+        # Extract initial condition u0
+        u0_batch = vel[:, 0, :]  # (n_per, Nx)
+        u0_batch = u0_batch.astype(np.float32)
+
+        # Flatten full trajectory
+        s_batch = vel.reshape(n_per, Nxt).astype(np.float32)
+
+        sl = slice(i * n_per, (i + 1) * n_per)
+        s[sl] = s_batch
+        u0[sl] = u0_batch
+        kappa[sl] = float(re_val)
+        del vel, u0_batch, s_batch
+        print(f"  Re={re_val}: {n_per} trajectories loaded")
+
+    # Create spatial grid
+    x_np = np.linspace(0, 1, Nx, dtype=np.float32)
+
+    return s, u0, kappa, x_np, Nx, Nt

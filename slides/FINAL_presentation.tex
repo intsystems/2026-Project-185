@@ -1,0 +1,453 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usepackage{cmap}
+\usepackage{tikz}
+\usepackage{array}
+\usepackage{multicol}
+\usepackage{booktabs}
+\usepackage{amssymb,amsfonts,amsmath}
+\usetikzlibrary{shapes,arrows.meta,positioning}
+
+\usecolortheme{beaver}
+\usefonttheme[onlymath]{serif}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[page number]
+\setbeamertemplate{blocks}[rounded=true,shadow=true]
+\setbeamersize{text margin left=0.5cm,text margin right=0.5cm}
+\setbeamerfont{author}{size=\normalsize}
+\setbeamerfont{institute}{size=\normalsize}
+\setbeamerfont{date}{size=\normalsize}
+
+\graphicspath{{../}{../TEMPO/ideas/}{../TEMPO/main/pictures/}}
+
+\newcommand{\cG}{\mathcal{G}}
+\newcommand{\cD}{\mathcal{D}}
+\newcommand{\cU}{\mathcal{U}}
+\newcommand{\cK}{\mathcal{K}}
+\newcommand{\cT}{\mathcal{T}}
+
+%----------------------------------------------------------------------------------------------------------
+\title[TEMPO]{TEMPO: Trajectory EM Mixture of POD Operators}
+\author{
+    Rodion Akinzhala 
+}
+
+\date{2026}
+
+\begin{document}
+
+\begin{frame}
+\thispagestyle{empty}
+\maketitle
+\end{frame}
+
+\begin{frame}{Problem Statement}
+
+\begin{block}{Task}
+  Given $\cD = \{(u_0^{(i)},\kappa^{(i)},s^{(i)})\}_{i=1}^N$,
+  construct $\hat{\cG}\approx\cG\colon(u_0,\kappa)\mapsto s$
+  accurate across all qualitative regimes, without solving the PDE.
+\end{block}
+
+\begin{block}{Problem}
+  When solutions change character fundamentally across $\kappa$
+  (shocks at $\nu{=}0.001$ vs.\ smooth diffusion at $\nu{=}1.0$),
+  a single global basis cannot fit all regimes well,
+  and error concentrates where it matters most.
+\end{block}
+
+
+\medskip
+\textbf{Proposal:} discover latent regimes and build a dedicated basis per regime.
+
+\medskip
+\textbf{TEMPO} — \textit{Trajectory EM Mixture of POD Operators}
+
+\end{frame}
+
+
+
+
+
+\begin{frame}{TEMPO: Central Idea}
+
+\begin{columns}[T]
+
+\begin{column}{0.55\textwidth}
+  \centering
+  \includegraphics[width=0.92\textwidth]{TEMPO/main/pictures/TEMPO_snaps.png}
+\end{column}
+
+\begin{column}{0.41\textwidth}
+  \begin{block}{Challenge}
+  \small
+  A single model fails when solutions change character
+  fundamentally across~$\kappa$.
+  \end{block}
+
+  \vspace{0.25cm}
+  \small
+  \textbf{Phase 1 — Offline:} discover $M$ solution regimes
+  from data; fit a dedicated basis to each
+
+  \smallskip
+  \textbf{Phase 2 — Online:} a gating network routes each
+  new input to the right regime; local branch networks
+  predict the solution:
+  \[
+    \hat{s} = \sum_m g_m(u_0,\kappa)
+    \Bigl[\phi_0^{(m)} + \sum_k b_{mk}\,\phi_k^{(m)}\Bigr]
+  \]
+\end{column}
+
+\end{columns}
+
+\end{frame}
+
+
+
+
+
+
+\begin{frame}{Related Work}
+
+\begin{itemize}
+  \setlength\itemsep{0.55em}
+
+  \textbf{DeepONet} \hfill {\footnotesize Lu et al., 2019}\\
+    {\small Branch encodes input function; trunk encodes query location.
+    Universal approximation of nonlinear operators.}
+
+   \textbf{POD-DeepONet} \hfill {\footnotesize Lu et al., 2022}\\
+    {\small Fixed POD basis replaces the trunk network.
+    Compact, interpretable, data-efficient.}
+
+   \textbf{Neural-POD} \hfill {\footnotesize Mou et al., 2026}\\
+    {\small Nonlinear orthogonal basis via greedy residual minimization.
+    Captures structure beyond any linear subspace.}
+
+   \textbf{Local Reduced-Order Bases} \hfill {\footnotesize Amsallem et al., 2012}\\
+    {\small Snapshot space partitioned into clusters; separate POD basis
+    per cluster. Hard assignment, offline only.}
+
+   \textbf{Local Bases + Selector Network} \hfill {\footnotesize Daniel et al., 2020}\\
+    {\small Subspace clustering on the Grassmann manifold; dictionary selector at inference.
+    Hard assignment, offline only, disconnected from basis quality.}
+
+\end{itemize}
+
+\vspace{0.1cm}
+{\footnotesize\textit{TEMPO integrates regime discovery and operator learning end-to-end.}}
+
+\end{frame}
+
+
+
+
+
+
+
+\begin{frame}{Generative Model}
+
+\textbf{Hypothesis.} Each trajectory arises from one of $M$ latent regimes; labels $z_i$ are unobserved.
+
+\medskip
+
+\begin{columns}[c]
+\begin{column}{0.54\textwidth}
+  \small
+  \begin{align*}
+    z_i
+      &\sim \mathrm{Categorical}(\pi_1,\ldots,\pi_M) \\[5pt]
+    \bigl(s^{(i)} \mid z_i{=}m\bigr)
+      &\sim \mathcal{N}\!\bigl(\hat{s}_m^{(i)},\;\sigma^2 W^{-1}\bigr) \\[5pt]
+    \hat{s}_m^{(i)}(y)
+      &= \phi_0^{(m)}(y)
+         + \sum_{k=1}^{K_m}\lambda_k^{(m,i)}\,\phi_k^{(m)}(y)
+  \end{align*}
+\end{column}
+\begin{column}{0.42\textwidth}
+  \small\renewcommand{\arraystretch}{1.5}
+  \begin{tabular}{ll}
+    $z_i$               & regime label (latent)  \\
+    $\pi_m$             & prior weight           \\
+    $\sigma^2$          & assignment softness    \\
+    $\phi_k^{(m)}$      & spatiotemporal mode    \\
+    $\lambda_k^{(m,i)}$ & scalar amplitude       \\
+  \end{tabular}
+\end{column}
+\end{columns}
+
+\medskip
+
+\begin{columns}[c]
+\begin{column}{0.54\textwidth}
+  \small Find $\Phi^*,\pi^*,\sigma^{2*}$
+  maximising the observed-data log-likelihood~(EM).
+\end{column}
+\begin{column}{0.42\textwidth}
+  \[
+    \varepsilon = \frac{1}{N_{\mathrm{test}}}
+    \sum_{i}\frac{\|s^{(i)}-\hat{s}^{(i)}\|_w}{\|s^{(i)}\|_w}
+  \]
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+
+
+
+
+\begin{frame}{Phase 1 — Basis Learning}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+  \small\textbf{Two basis types}\\[6pt]
+
+  \textbf{POD} (linear):\\
+  $\tilde{S} \approx U_K\Sigma_K V_K^\top$;\enspace
+  modes $\{\phi_k\}$ are columns of $U_K$
+
+  \medskip
+  \textbf{NeuralPOD} (nonlinear):\\
+  each mode $\phi_k$ is a Fourier feature MLP;\\
+  greedy residual minimization:
+  \[
+    \min_{\phi_k,\,\{\lambda_k^{(i)}\}}
+    \sum_{i=1}^N \bigl\|r^{(k-1,i)} - \lambda_k^{(i)}\phi_k\bigr\|_w^2
+  \]
+  {\footnotesize $r^{(k-1,i)}$ — residual after fitting $k{-}1$ modes}\\[2pt]
+  stops when residual $<\tau$ of initial variance
+\end{column}
+\begin{column}{0.48\textwidth}
+  \small\textbf{TEMPO: EM over $M$ regimes}\\[6pt]
+
+  \textbf{E-step} — soft regime assignments:
+  \[
+    \gamma_{im} \propto \pi_m
+    \exp\!\Bigl(-\frac{\|s^{(i)}-\hat{s}_m^{(i)}\|_w^2}{2\sigma^2}\Bigr)
+  \]
+
+  \medskip
+  \textbf{M-step} — $\gamma_{im}$-weighted basis per regime:
+  \[
+    \min_{\Phi_m}\;\sum_{i=1}^N
+    \gamma_{im}\,\|s^{(i)}-\hat{s}_m^{(i)}\|_w^2
+  \]
+  solved by $\gamma_{im}$-weighted SVD (POD) or greedy MLP (NeuralPOD)
+\end{column}
+\end{columns}
+
+\vspace{0.2cm}
+\begin{center}
+{\footnotesize\itshape Better bases $\to$ sharper assignments $\to$ better bases.}
+\end{center}
+
+\end{frame}
+
+
+\begin{frame}{Phase 2 — Online Operator}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+  \small\textbf{Single-regime baselines}\\[6pt]
+
+  Bases $\{\phi_k\}$ frozen from Phase~1.\\[4pt]
+  BranchNet predicts expansion coefficients:
+  \[
+    \min_\theta\;\frac{1}{N}\sum_{i=1}^N
+    \bigl\|\mathcal{B}_\theta(u_0^{(i)},\kappa^{(i)}) - \boldsymbol{\lambda}^{(i)}\bigr\|^2
+  \]
+  Prediction at any $(x,t)$:
+  \[
+    \hat{s} = \phi_0 + \sum_{k=1}^K \mathcal{B}_{\theta,k}(u_0,\kappa)\,\phi_k
+  \]
+\end{column}
+\begin{column}{0.48\textwidth}
+  \small\textbf{TEMPO: gated operator}\\[6pt]
+
+  GatingNet $g_m$ $+$ $M$ BranchNets $b_{mk}$:
+  \[
+    \hat{s} = \sum_m g_m(u_0,\kappa)
+    \Bigl[\phi_0^{(m)} + \sum_k b_{mk}\,\phi_k^{(m)}\Bigr]
+  \]
+  Training loss:
+  \[
+    \mathcal{L} = \mathcal{L}_{\text{data}}
+    + \alpha_{\text{KL}}\,\mathcal{L}_{\text{KL}}
+    - \alpha_H\,\mathcal{L}_{\text{ent}}
+  \]
+  {\footnotesize
+  $\mathcal{L}_{\text{KL}}$: anchors gating to EM responsibilities\\
+  $\mathcal{L}_{\text{ent}}$: prevents collapse to a single regime}
+\end{column}
+\end{columns}
+
+\vspace{0.1cm}
+{\footnotesize\itshape Bases $\{\Phi_m^*\}$ and responsibilities $\{\gamma_{im}^*\}$ frozen; only GatingNet and BranchNets are trained.}
+
+\end{frame}
+
+
+
+
+
+
+
+\begin{frame}{Computational Experiment}
+
+\begin{columns}[T]
+\begin{column}{0.52\textwidth}
+  \small\textbf{Datasets (PDEBench):}\\[6pt]
+
+  \textbf{1D Burgers'}\enspace
+  $u_t + uu_x = \nu\,u_{xx}$,\; $x\in(-1,1)$,\; $t\in(0,2]$\\[2pt]
+  $\nu\in\{0.001,\,0.01,\,0.1,\,1.0\}$;\enspace
+  $9{,}500$ traj.\ per $\nu$;\enspace $N_x{=}1{,}024$,\; $N_t{=}201$\\[2pt]
+  {\footnotesize smooth diffusion at $\nu{=}1.0$ $\to$ near-discontinuous shocks at $\nu{=}0.001$}
+
+  \medskip
+  \textbf{2D Darcy flow}\enspace
+  $-\nabla\cdot(a\nabla u)=\beta$,\; $x\in(0,1)^2$\\[2pt]
+  $\beta\in\{0.01,\,0.1,\,1,\,10,\,100\}$;\enspace
+  $8{,}000$ train per $\beta$;\enspace $128{\times}128$ grid\\[2pt]
+  {\footnotesize solution scales linearly with $\beta$ — cross-parameter errors exceed $10^3$}
+\end{column}
+\begin{column}{0.44\textwidth}
+  \small\textbf{Verification claims:}
+  \begin{enumerate}[1)]
+    \item EM recovers interpretable regime structure from unlabelled data
+    \item Local bases outperform a single global basis at equal mode count
+    \item TEMPO outperforms a jointly-trained model without regime discovery
+  \end{enumerate}
+
+  \medskip
+  \small\textbf{Methods:}\\[4pt]
+  \footnotesize
+  \begin{tabular}{ll}
+    DeepONet, FNO, CNO            & global, no basis \\
+    POD-DeepONet                  & global, linear \\
+    NeuralPOD-DeepONet            & global, NeuralPOD \\
+    \textcolor{red!70}{\textbf{TEMPO(POD)}}       & $M$ regimes, linear \\
+    \textcolor{red!70}{\textbf{TEMPO(NeuralPOD)}} & $M$ regimes, NeuralPOD \\
+  \end{tabular}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+
+
+
+
+
+
+\begin{frame}{Error Analysis}
+
+\centering
+\includegraphics[width=0.92\textwidth]{TEMPO/main/figs/TEMPO_phase1_burgers_npod_M3.png}
+
+\vspace{0.1cm}
+\small
+TEMPO(NeuralPOD), $M{=}3$: UMAP coloured by regime (\textit{left}),
+by $\nu$ (\textit{centre}), GMM fit in coefficient space (\textit{right}).
+Sharper assignments ($H{=}0.23$) than POD ($H{=}0.84$).
+Regimes \emph{cross $\nu$ isolines} — EM partitions by solution geometry, not by $\kappa$.
+
+\end{frame}
+
+
+
+
+
+
+
+\begin{frame}{Results: gating and error}
+
+\centering
+\includegraphics[width=0.95\textwidth]{TEMPO/main/figs/TEMPO_phase2.png}
+
+\vspace{0.08cm}
+{\footnotesize
+TEMPO(POD), $M{=}3$, joint training on $\nu\in\{0.001,0.1,1.0\}$.\\[3pt]
+\textit{Left:} mean gating weight $g_m$ per regime at each~$\nu$ —
+all three regimes activate equally across the full viscosity range,
+confirming that EM partitions by solution geometry, not by~$\nu$.\\[2pt]
+\textit{Right:} per-trajectory reconstruction error —
+tight distributions at $\nu{=}0.1$ and $\nu{=}1.0$;
+wider spread at $\nu{=}0.001$ (near-discontinuous shocks are harder to fit).}
+
+\end{frame}
+
+
+
+
+\begin{frame}{Results: reconstruction}
+
+\begin{columns}[T]
+\begin{column}{0.52\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_burgers_reconstruct.png}
+
+  {\footnotesize TEMPO(POD) ($M{=}3$): ground truth / prediction / error}
+\end{column}
+\begin{column}{0.44\textwidth}
+  \small\textbf{Joint training on Burgers'} ($\nu\in\{0.001,0.1,1.0\}$):\\[6pt]
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{l c c c}
+    \toprule
+    & $0.001$ & $0.1$ & $1.0$ \\
+    \midrule
+    POD-DeepONet  & 0.460 & 0.339 & 0.210 \\
+    \textcolor{red!70}{\textbf{TEMPO(POD)}} & \textbf{0.317} & \textbf{0.168} & \textbf{0.182} \\
+    \bottomrule
+  \end{tabular}
+
+  \medskip
+  \small
+  TEMPO(POD) improves by \textbf{13--50\%} across all~$\nu$
+  simultaneously — a single jointly-trained model
+  without regime discovery cannot match this.
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+
+
+
+\begin{frame}{Conclusion}
+
+\begin{block}{TEMPO: two-phase framework}
+  \begin{itemize}
+    \item[{}] \textbf{Offline:} EM discovers $M$ latent regimes;
+      $\gamma_{im}$-weighted basis (POD or NeuralPOD) per regime
+    \item[{}] \textbf{Online:} GatingNet anchored to $\gamma_{im}^*$
+      via $\mathcal{L}_\text{KL}$; $M$ BranchNets predict regime-specific coefficients
+  \end{itemize}
+\end{block}
+
+\begin{block}{Main finding}
+  TEMPO(POD) outperforms per-$\kappa$ specialists across the full parameter range
+  and the joint POD-DeepONet baseline by 13--50\% on Burgers',
+  up to $3{\times}$ on Darcy flow.
+  Discovered regimes cross $\kappa$ isolines — geometry-driven rather than parameter-driven.
+\end{block}
+
+\begin{block}{Open directions}
+  \begin{itemize}
+    \item[{}] Parameter-conditioned modes $\phi_k^{(m)}(\cdot;\kappa)$
+    \item[{}] Extension to higher-dimensional benchmarks (Navier--Stokes)
+    \item[{}] Convergence theory for Generalized EM with nonlinear bases
+  \end{itemize}
+\end{block}
+
+\end{frame}
+
+
+
+\end{document}

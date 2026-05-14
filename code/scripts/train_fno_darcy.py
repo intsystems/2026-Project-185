@@ -64,8 +64,8 @@ def parse_args():
     p.add_argument("--hidden_dim",       type=int,   default=32)
     p.add_argument("--n_layers",         type=int,   default=4)
     # Training
-    p.add_argument("--n_epochs",         type=int,   default=200)
-    p.add_argument("--batch_size",       type=int,   default=32)
+    p.add_argument("--n_epochs",         type=int,   default=105)
+    p.add_argument("--batch_size",       type=int,   default=64)
     p.add_argument("--lr",               type=float, default=1e-3)
     p.add_argument("--lr_step",          type=int,   default=80)
     p.add_argument("--lr_gamma",         type=float, default=0.5)
@@ -98,7 +98,7 @@ def build_fno_input(a_np, kappa_np, xy_np, Nx, Ny):
     norm_kappa = (log_kappa - _LOG10_BETA_MIN) / (_LOG10_BETA_MAX - _LOG10_BETA_MIN) * 2 - 1
     kappa_ch   = np.broadcast_to(norm_kappa[:, None, None], (N, Nx, Ny)).copy()
 
-    return np.stack([a_grid, kappa_ch, xx_b, yy_b], axis=1)  # (N, 4, Nx, Ny)
+    return np.stack([a_grid, kappa_ch, xx_b, yy_b], axis=1).astype(np.float32)  # (N, 4, Nx, Ny)
 
 
 def predict_batched(model, X_tensor, device, batch_size=64):
@@ -179,10 +179,10 @@ def main():
     N_train = len(train_idx)
     N_test  = len(test_idx)
 
-    X_train = torch.tensor(build_fno_input(a_train, kappa_train, xy_np, Nx, Ny))
-    X_test  = torch.tensor(build_fno_input(a_test,  kappa_test,  xy_np, Nx, Ny))
-    Y_train = torch.tensor(s_train.reshape(-1, Nx, Ny)[:, None, :, :])  # (N, 1, Nx, Ny)
-    Y_test  = torch.tensor(s_test.reshape(-1,  Nx, Ny)[:, None, :, :])
+    X_train = torch.tensor(build_fno_input(a_train, kappa_train, xy_np, Nx, Ny)).float()
+    X_test  = torch.tensor(build_fno_input(a_test,  kappa_test,  xy_np, Nx, Ny)).float()
+    Y_train = torch.tensor(s_train.reshape(-1, Nx, Ny)[:, None, :, :]).float()  # (N, 1, Nx, Ny)
+    Y_test  = torch.tensor(s_test.reshape(-1,  Nx, Ny)[:, None, :, :]).float()
 
     print(f"FNO input: {tuple(X_train.shape)}  output: {tuple(Y_train.shape)}")
 
