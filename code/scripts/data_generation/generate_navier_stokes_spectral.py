@@ -127,15 +127,21 @@ def simulate_one(omega0, nu, dt, n_steps_burn, n_steps_save, n_inner, N):
     # Save trajectory
     traj = np.zeros((n_steps_save + 1, N, N, 2), dtype=np.float32)
     u, v = _omega_to_vel(omega_hat, kxr, kyr, k2r)
+    if not (np.isfinite(u).all() and np.isfinite(v).all()
+            and np.abs(u).max() < 1e4 and np.abs(v).max() < 1e4):
+        return None
     traj[0, :, :, 0] = u.astype(np.float32)
     traj[0, :, :, 1] = v.astype(np.float32)
 
     for t in range(n_steps_save):
         for _ in range(n_inner):
             omega_hat, nl_prev = step(omega_hat, nl_prev)
-        if not np.isfinite(omega_hat).all():
+        if not np.isfinite(omega_hat).all() or np.abs(omega_hat).max() > 1e6:
             return None
         u, v = _omega_to_vel(omega_hat, kxr, kyr, k2r)
+        if not (np.isfinite(u).all() and np.isfinite(v).all()
+                and np.abs(u).max() < 1e4 and np.abs(v).max() < 1e4):
+            return None
         traj[t + 1, :, :, 0] = u.astype(np.float32)
         traj[t + 1, :, :, 1] = v.astype(np.float32)
 
