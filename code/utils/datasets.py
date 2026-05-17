@@ -328,3 +328,30 @@ def load_ns_1d_stacked(
     x_np = np.linspace(0, 1, Nx, dtype=np.float32)
 
     return s, u0, kappa, x_np, Nx, Nt
+
+
+def measure_inference_time(predict_fn, device, n_warmup=3, n_rep=10):
+    """
+    Measure inference time of predict_fn (already bound to test inputs).
+    Runs n_warmup passes (discarded), then n_rep timed passes.
+    Returns (mean_ms_per_call, ) — total ms for one full predict_fn() call.
+    """
+    import time
+
+    def sync():
+        if hasattr(device, 'type'):
+            dtype = device.type
+        else:
+            dtype = str(device)
+        if 'cuda' in dtype:
+            import torch
+            torch.cuda.synchronize()
+
+    for _ in range(n_warmup):
+        predict_fn()
+    sync()
+    t0 = time.perf_counter()
+    for _ in range(n_rep):
+        predict_fn()
+    sync()
+    return (time.perf_counter() - t0) / n_rep * 1000.0  # ms

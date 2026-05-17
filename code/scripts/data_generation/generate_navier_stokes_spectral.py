@@ -207,6 +207,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--re", type=int, nargs="*", default=None,
                         help="Reynolds numbers to generate (default: all)")
+    parser.add_argument("--n_per_re", type=int, default=None,
+                        help="Samples per Re (default: from REYNOLDS_CONFIGS)")
     args = parser.parse_args()
 
     target_res = args.re if args.re else sorted(REYNOLDS_CONFIGS.keys())
@@ -224,6 +226,8 @@ def main():
             print(f"  WARNING: Re={re} not in REYNOLDS_CONFIGS, skipping")
             continue
         cfg = REYNOLDS_CONFIGS[re]
+        if args.n_per_re is not None:
+            cfg = {**cfg, "n_samples": args.n_per_re}
         try:
             generate_ns_data(re, cfg["nu"], cfg["n_samples"], cfg["T_burn"])
             success += 1

@@ -655,7 +655,7 @@ a single jointly-trained basis without regime discovery.
 \label{sec:setup}
 
 \paragraph{Datasets.}
-We use two parametric PDE benchmarks from PDEBench~\cite{Takamoto2022}.
+We use three parametric PDE benchmarks; the first two are from PDEBench~\cite{Takamoto2022}.
 
 \textbf{1D Burgers' equation.}
 \begin{equation}
@@ -684,6 +684,24 @@ Each value provides $N{=}8{,}000$ training and $1{,}000$ test samples
 discretised on a $128{\times}128$ uniform grid ($N_y{=}16{,}384$ spatial points),
 $40{,}000$ trajectories in total.
 The operator maps $a(x)$ to the pressure solution $u(x)$.
+
+\textbf{2D incompressible Navier-Stokes.}
+\begin{equation}
+  \partial_t \omega + \mathbf{u}\cdot\nabla\omega
+  = \frac{1}{\mathrm{Re}}\,\Delta\omega + f,
+  \qquad \mathbf{x}\in(0,1)^2,\; t\in(0,2],
+  \label{eq:ns}
+\end{equation}
+with periodic boundary conditions, $\omega=\nabla\times\mathbf{u}$,
+divergence-free $\mathbf{u}$ recovered via the stream function,
+and Kolmogorov-type forcing
+$f(\mathbf{x})=0.1\bigl(\sin 2\pi(x_1{+}x_2)+\cos 2\pi(x_1{+}x_2)\bigr)$~\citep{Li2021}.
+Reynolds number $\mathrm{Re}\in\{100,\,1000,\,3600,\,10000\}$ spans four
+qualitatively distinct regimes from smooth laminar flow to developed turbulence.
+Each value provides $N{=}5{,}000$ trajectories on a $64{\times}64$ periodic
+grid ($20{,}000$ total; $4{,}000$/$1{,}000$ train/test);
+see Appendix~\ref{app:ns_data}.
+Operator: $\mathbf{u}_0\mapsto(\mathbf{u}_t)_{t=1}^{20}$, $\Delta t{=}0.1$.
 
 \paragraph{Methods.}
 We compare DeepONet~\cite{Lu2019}, POD-DeepONet~\cite{Lu2022},
@@ -920,6 +938,23 @@ Convergence guarantees for Generalized EM under nonlinear basis parameterisation
 \newpage
 \appendix
 \section{Appendix}\label{app}
+
+\subsection{2D Navier-Stokes Data Generation}\label{app:ns_data}
+
+We use the same equation and forcing as~\citet{Li2021} with a
+pseudo-spectral solver in stream-function formulation: diffusion treated
+implicitly (Crank--Nicolson), advection explicitly (second-order
+Adams--Bashforth), and $\tfrac{2}{3}$-rule dealiasing on the $64{\times}64$
+grid. Simulation time-step $\delta t{=}0.01$; each recorded snapshot
+aggregates $10$ sub-steps ($\Delta t{=}0.1$). Initial vorticity fields are
+random sums of sinusoids,
+\[
+  \omega_0(\mathbf{x}) = \sum_{k=1}^{7}\frac{a_k}{1{+}k}
+  \bigl[\sin(2\pi k\,x_1+\phi_k)+\cos(2\pi k\,x_2+\phi_k)\bigr],
+  \quad a_k\sim\mathcal{N}(0,1),\;\phi_k\sim\mathcal{U}[0,2\pi].
+\]
+A $5\,\mathrm{s}$ burn-in (500 simulation steps) discards transient
+behaviour before recording begins.
 
 \subsection{Additional Experiments}\label{app:exp}
 

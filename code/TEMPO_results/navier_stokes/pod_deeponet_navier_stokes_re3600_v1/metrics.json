@@ -1,0 +1,59 @@
+{
+  "run_name": "pod_deeponet_navier_stokes_re3600_v1",
+  "n_modes": 80,
+  "n_train": 4500,
+  "n_test": 500,
+  "train_mean": 0.15060357749462128,
+  "train_median": 0.14300590753555298,
+  "train_std": 0.05241720378398895,
+  "test_mean": 0.18027691543102264,
+  "test_median": 0.16462087631225586,
+  "test_std": 0.0771365612745285,
+  "test_p95": 0.32265445590019226,
+  "cross_re": {
+    "100": {
+      "mean": 0.6599864363670349,
+      "median": 0.6254308819770813,
+      "std": 0.3184548318386078,
+      "p95": 1.2026000022888184
+    },
+    "1000": {
+      "mean": 0.3916092813014984,
+      "median": 0.3707732558250427,
+      "std": 0.1618213951587677,
+      "p95": 0.6579499244689941
+    },
+    "3600": {
+      "mean": 0.18027691543102264,
+      "median": 0.16462087631225586,
+      "std": 0.0771365612745285,
+      "p95": 0.32265445590019226
+    },
+    "10000": {
+      "mean": 0.6232327818870544,
+      "median": 0.6229214668273926,
+      "std": 0.13808269798755646,
+      "p95": 0.851426899433136
+    }
+  },
+  "hparams": {
+    "re_values": [
+      3600
+    ],
+    "run_name": null,
+    "results_dir": "/Users/rknza/research/m1p/project/code/TEMPO_results/navier_stokes",
+    "n_samples": 5000,
+    "n_test_per_re": 500,
+    "data_dir": "/Users/rknza/data/2D/Navier_Stokes",
+    "max_modes": 80,
+    "hidden_dim": 256,
+    "n_layers": 4,
+    "n_epochs": -1,
+    "batch_size": 64,
+    "lr": 0.0003,
+    "log_every": 50,
+    "seed": 39,
+    "n_viz": 2,
+    "n_epochs_used": 500
+  }
+}
