@@ -24,7 +24,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-from utils.datasets import load_stacked
+from utils.datasets import load_stacked, measure_inference_time
 
 
 def rel_l2(true, pred):
@@ -243,6 +243,15 @@ def main():
         print(f"  nu={nu_eval}: mean={err_nu.mean():.4f}")
 
     metrics["cross_nu"] = cross_nu_metrics
+
+    # Inference time
+    model.eval()
+    _inf_ms = measure_inference_time(
+        lambda: model(u0_test[:, ::effective_stride], kappa_test, xt),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / N_test
 
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)

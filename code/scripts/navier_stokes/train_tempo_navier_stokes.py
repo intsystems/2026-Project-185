@@ -27,7 +27,7 @@ from models.tempo import TEMPOTrainer, TEMPOConfig, pod_factory, fourier_pod_fac
 from models.pod import PODConfig
 from models.fourier_neural_pod import FourierNeuralPODConfig
 from models.tempo_online import build_tempo_online, TEMPOOnlineConfig, _num_modes
-from utils.datasets import load_ns_stacked
+from utils.datasets import load_ns_stacked, measure_inference_time
 
 
 def rel_l2_vec(true, pred):
@@ -43,8 +43,8 @@ def parse_args():
 
     # Data
     p.add_argument("--re_values",     type=int, nargs="+", default=[100, 1000, 3600, 10000])
-    p.add_argument("--n_samples",     type=int,   default=10000)
-    p.add_argument("--n_test_per_re", type=int,   default=2000)
+    p.add_argument("--n_samples",     type=int,   default=5000)
+    p.add_argument("--n_test_per_re", type=int,   default=1000)
     p.add_argument("--data_dir",      type=str,   default=os.path.expanduser("~/data/2D/Navier_Stokes"))
 
     # EM (TEMPOConfig)
@@ -73,7 +73,7 @@ def parse_args():
 
     # Online phase (TEMPOOnlineConfig)
     p.add_argument("--online_lr",         type=float, default=3e-4)
-    p.add_argument("--online_epochs",     type=int,   default=500)
+    p.add_argument("--online_epochs",     type=int,   default=200)
     p.add_argument("--online_batch",      type=int,   default=32)
     p.add_argument("--online_hidden_dim", type=int,   default=128)
     p.add_argument("--online_n_layers",   type=int,   default=4)
@@ -85,6 +85,7 @@ def parse_args():
     # Misc
     p.add_argument("--seed",          type=int,   default=42)
     p.add_argument("--n_viz",         type=int,   default=1)
+    p.add_argument("--n_umap",        type=int,   default=5000)
     p.add_argument("--skip_umap",     action="store_true", default=False,
                    help="Skip UMAP visualization (faster, no umap-learn needed)")
 
@@ -195,7 +196,7 @@ def main():
     )
 
     trainer = TEMPOTrainer(cfg)
-    trainer.train(s, x_dev, t=None, kappa=kappa)
+    trainer.train(s[train_idx], x_dev, t=None, kappa=kappa[train_idx])
 
     # EM convergence plot
     log = trainer.history_phase1
@@ -244,7 +245,7 @@ def main():
     s_train     = s[train_idx];         s_test     = s[test_idx]
     u0_train    = u0[train_idx];        u0_test    = u0[test_idx]
     kappa_train = kappa[train_idx];     kappa_test = kappa[test_idx]
-    gamma_train = trainer.gamma[train_idx]
+    gamma_train = trainer.gamma  # trainer was fitted on train_idx only
 
     print(f"train: {s_train.shape}, test: {s_test.shape}")
     for m, t in enumerate(trainer.trainers):
@@ -490,10 +491,45 @@ def main():
         metrics[f"re{re:.0f}_std"] = float(rl2.std())
         metrics[f"re{re:.0f}_p95"] = float(np.percentile(rl2, 95))
 
+    # Inference time
+    _inf_ms = measure_inference_time(
+        lambda: online_trainer.predict(
+            u0_new=u0_test, kappa_new=kappa_test,
+            x_flat=x_dev, trainers=trainer.trainers,
+        ),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / len(u0_test)
+
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
 
     print(f"Results saved to {RUN_DIR}")
+
+    # UMAP visualization
+    if not args.skip_umap:
+        try:
+            from utils.plotting import plot_umap_regimes
+            rng_umap = np.random.default_rng(args.seed)
+            idx_umap = rng_umap.choice(len(train_idx), min(args.n_umap, len(train_idx)), replace=False)
+            plot_umap_regimes(
+                alpha=trainer.alpha[idx_umap].cpu().numpy(),
+                mu=trainer.mu.cpu().numpy(),
+                Sigma=trainer.Sigma.cpu().numpy(),
+                hard_labels=trainer.gamma[idx_umap].argmax(dim=1).cpu().numpy(),
+                param_vals=kappa[train_idx][idx_umap, 0].cpu().numpy(),
+                regime_colors=regime_colors,
+                param_label="Re",
+                title="NS trajectories - TEMPO EM regime structure",
+                save_path=os.path.join(RUN_DIR, "TEMPO_phase1.png"),
+                seed=args.seed,
+            )
+            print("UMAP saved.")
+        except ImportError:
+            print("umap-learn not installed, skipping UMAP plot")
+        except Exception as e:
+            print(f"UMAP failed: {e}")
 
 
 if __name__ == "__main__":

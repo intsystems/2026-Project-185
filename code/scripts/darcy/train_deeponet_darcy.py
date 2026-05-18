@@ -24,7 +24,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-from utils.datasets import load_darcy_stacked, DATA_DIR
+from utils.datasets import load_darcy_stacked, DATA_DIR, measure_inference_time
 from utils.plotting import (
     plot_error_dist, plot_cross_param_bar, plot_reconstruction_xy,
 )
@@ -258,6 +258,15 @@ def main():
         x_np_1d = xy_np[::Ny, 0]
         y_np_1d = xy_np[:Ny, 1]
         plot_reconstruction_xy(true_list, pred_list, rl2_list, x_np_1d, y_np_1d, "DeepONet", os.path.join(RUN_DIR, "reconstruction.png"))
+
+    # Inference time
+    model.eval()
+    _inf_ms = measure_inference_time(
+        lambda: model(a_test[:, ::effective_stride], kappa_test, xy),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / N_test
 
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)

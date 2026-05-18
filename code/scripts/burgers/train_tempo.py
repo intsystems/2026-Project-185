@@ -20,7 +20,7 @@ from models.tempo import TEMPOTrainer, TEMPOConfig, pod_factory, fourier_pod_fac
 from models.pod import PODConfig
 from models.fourier_neural_pod import FourierNeuralPODConfig
 from models.tempo_online import build_tempo_online, TEMPOOnlineConfig, _num_modes
-from utils.datasets import load_stacked
+from utils.datasets import load_stacked, measure_inference_time
 
 
 def rel_l2_vec(true, pred):
@@ -161,8 +161,20 @@ def main():
         basis_factory=basis_factory,
     )
 
+    # Split before EM so basis is fitted on training data only
+    N_per_nu  = args.n_samples
+    nu_list   = args.nu_values
+    train_idx = torch.cat([
+        torch.arange(i * N_per_nu, (i + 1) * N_per_nu - args.n_test_per_nu)
+        for i in range(len(nu_list))
+    ])
+    test_idx = torch.cat([
+        torch.arange((i + 1) * N_per_nu - args.n_test_per_nu, (i + 1) * N_per_nu)
+        for i in range(len(nu_list))
+    ])
+
     trainer = TEMPOTrainer(cfg)
-    trainer.train(s, x, t=None, kappa=kappa)
+    trainer.train(s[train_idx], x, t=None, kappa=kappa[train_idx])
 
     # EM convergence plot
     log = trainer.history_phase1
@@ -196,22 +208,11 @@ def main():
     # --- Phase 2: Online gated operator ---
     print("=== Phase 2: Online gated operator ===")
 
-    N_per_nu  = args.n_samples
-    nu_list   = args.nu_values
-    train_idx = torch.cat([
-        torch.arange(i * N_per_nu, (i + 1) * N_per_nu - args.n_test_per_nu)
-        for i in range(len(nu_list))
-    ])
-    test_idx = torch.cat([
-        torch.arange((i + 1) * N_per_nu - args.n_test_per_nu, (i + 1) * N_per_nu)
-        for i in range(len(nu_list))
-    ])
-
     u0 = s[:, :Nx]
     s_train     = s[train_idx];         s_test     = s[test_idx]
     u0_train    = u0[train_idx];        u0_test    = u0[test_idx]
     kappa_train = kappa[train_idx];     kappa_test = kappa[test_idx]
-    gamma_train = trainer.gamma[train_idx]
+    gamma_train = trainer.gamma  # trainer was fitted on train_idx only
 
     print(f"train: {s_train.shape}, test: {s_test.shape}")
     for m, t in enumerate(trainer.trainers):
@@ -402,6 +403,17 @@ def main():
 
     torch.save(trainer, os.path.join(RUN_DIR, "trainer.pt"))
 
+    # Inference time
+    _inf_ms = measure_inference_time(
+        lambda: online_trainer.predict(
+            u0_new=u0_test, kappa_new=kappa_test,
+            x_flat=x, trainers=trainer.trainers,
+        ),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / len(u0_test)
+
     metrics["hparams"] = vars(args)
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
@@ -413,13 +425,13 @@ def main():
         try:
             from utils.plotting import plot_umap_regimes
             rng_umap = np.random.default_rng(args.seed)
-            idx_umap = rng_umap.choice(len(s), min(args.n_umap, len(s)), replace=False)
+            idx_umap = rng_umap.choice(len(train_idx), min(args.n_umap, len(train_idx)), replace=False)
             plot_umap_regimes(
                 alpha=trainer.alpha[idx_umap].cpu().numpy(),
                 mu=trainer.mu.cpu().numpy(),
                 Sigma=trainer.Sigma.cpu().numpy(),
                 hard_labels=trainer.gamma[idx_umap].argmax(dim=1).cpu().numpy(),
-                param_vals=kappa[idx_umap, 0].cpu().numpy(),
+                param_vals=kappa[train_idx][idx_umap, 0].cpu().numpy(),
                 regime_colors=regime_colors,
                 param_label="nu",
                 title="Burgers trajectories - TEMPO EM regime structure",

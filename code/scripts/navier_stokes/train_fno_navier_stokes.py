@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Train FNO on 2D incompressible Navier-Stokes — specialist (one Re) or joint (multiple Re).
 
-Input:  (N, 3, 64, 64) — [u0, v0, Re_norm]
+Input:  (N, 2, 64, 64) — [u0, v0]  (no Re channel — faithful to original FNO)
 Output: (N, 2*Nt, 64, 64) — full velocity trajectory
 
 Usage:
@@ -28,11 +28,9 @@ _PROJECT_ROOT = _SCRIPT_DIR.parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from neuralop.models import FNO
-from utils.datasets import load_ns_stacked
+from utils.datasets import load_ns_stacked, measure_inference_time
 
 _ALL_RE = [100, 1000, 3600, 10000]
-_LOG10_RE_MIN = np.log10(100)    # 2.0
-_LOG10_RE_MAX = np.log10(10000)  # 4.0
 
 
 def rel_l2(true, pred):
@@ -41,14 +39,10 @@ def rel_l2(true, pred):
 
 
 def build_fno_input(u0_np, kappa_np, Nx, Ny):
-    """u0_np: (N, Nx*Ny*2), kappa_np: (N,) → (N, 3, Nx, Ny)"""
+    """u0_np: (N, Nx*Ny*2), kappa_np: (N,) → (N, 2, Nx, Ny)  (no Re channel)"""
     N = len(u0_np)
-    # u0: (N, Nx*Ny*2) from vel[:,0] C-order → (N, Nx, Ny, 2) → (N, 2, Nx, Ny)
     u0g = u0_np.reshape(N, Nx, Ny, 2).transpose(0, 3, 1, 2).astype(np.float32)
-    log_re  = np.log10(kappa_np.astype(np.float64)).astype(np.float32)
-    norm_re = (log_re - _LOG10_RE_MIN) / (_LOG10_RE_MAX - _LOG10_RE_MIN) * 2 - 1
-    re_ch   = np.broadcast_to(norm_re[:, None, None, None], (N, 1, Nx, Ny)).copy()
-    return np.concatenate([u0g, re_ch], axis=1).astype(np.float32)  # (N, 3, Nx, Ny)
+    return u0g  # (N, 2, Nx, Ny)
 
 
 def build_target(s_np, Nt, Nx, Ny):
@@ -85,16 +79,16 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--re_values",     type=int,   nargs="+", required=True)
     p.add_argument("--run_name",      type=str,   default=None)
-    p.add_argument("--results_dir",   type=str,   default=str(_PROJECT_ROOT / "results" / "navier_stokes"))
-    p.add_argument("--n_samples",     type=int,   default=2000)
-    p.add_argument("--n_test_per_re", type=int,   default=400)
+    p.add_argument("--results_dir",   type=str,   default=str(_PROJECT_ROOT / "TEMPO_results" / "navier_stokes"))
+    p.add_argument("--n_samples",     type=int,   default=5000)
+    p.add_argument("--n_test_per_re", type=int,   default=1000)
     p.add_argument("--data_dir",      type=str,   default=os.path.expanduser("~/data/2D/Navier_Stokes"))
     # FNO arch
     p.add_argument("--n_modes",       type=int,   default=12)
     p.add_argument("--hidden_dim",    type=int,   default=64)
     p.add_argument("--n_layers",      type=int,   default=4)
     # Training
-    p.add_argument("--n_epochs",      type=int,   default=200)
+    p.add_argument("--n_epochs",      type=int,   default=70)
     p.add_argument("--batch_size",    type=int,   default=16)
     p.add_argument("--lr",            type=float, default=1e-3)
     p.add_argument("--lr_step",       type=int,   default=150)
@@ -188,7 +182,7 @@ def main():
     # --- Model ---
     model = FNO(
         n_modes=(args.n_modes, args.n_modes),
-        in_channels=3,
+        in_channels=2,
         out_channels=out_ch,
         hidden_channels=args.hidden_dim,
         n_layers=args.n_layers,
@@ -382,6 +376,14 @@ def main():
         "run_name":    RUN_NAME,
         "hparams":     vars(args),
     }, os.path.join(RUN_DIR, "model.pt"))
+
+    # Inference time
+    _inf_ms = measure_inference_time(
+        lambda: predict_batched(model, X_test, DEVICE),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / len(X_test)
 
     metrics["hparams"] = vars(args)
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:

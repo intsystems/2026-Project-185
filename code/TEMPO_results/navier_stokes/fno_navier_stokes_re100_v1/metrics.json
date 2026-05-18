@@ -1,0 +1,57 @@
+{
+  "run_name": "fno_navier_stokes_re100_v1",
+  "n_params": 1432426,
+  "n_train": 1600,
+  "n_test": 400,
+  "overall_mean": 0.013380758464336395,
+  "overall_median": 0.01209273748099804,
+  "cross_re": {
+    "100": {
+      "mean": 0.013380758464336395,
+      "median": 0.01209273748099804,
+      "std": 0.0049347104504704475,
+      "p95": 0.021105896681547165
+    },
+    "1000": {
+      "mean": 0.261679470539093,
+      "median": 0.2691420316696167,
+      "std": 0.030472707003355026,
+      "p95": 0.29799744486808777
+    },
+    "3600": {
+      "mean": 0.36811280250549316,
+      "median": 0.3754425644874573,
+      "std": 0.034542981535196304,
+      "p95": 0.40885505080223083
+    },
+    "10000": {
+      "mean": 0.4373995065689087,
+      "median": 0.44933581352233887,
+      "std": 0.036116376519203186,
+      "p95": 0.47970864176750183
+    }
+  },
+  "inference_ms_total": 415.545560978353,
+  "inference_ms_per_sample": 1.0388639024458826,
+  "hparams": {
+    "re_values": [
+      100
+    ],
+    "run_name": null,
+    "results_dir": "/home/a.bulkin/TEMPO/code/results/navier_stokes",
+    "n_samples": 2000,
+    "n_test_per_re": 400,
+    "data_dir": "/home/a.bulkin/data/2D/Navier_Stokes",
+    "n_modes": 12,
+    "hidden_dim": 64,
+    "n_layers": 4,
+    "n_epochs": 70,
+    "batch_size": 16,
+    "lr": 0.001,
+    "lr_step": 150,
+    "lr_gamma": 0.5,
+    "log_every": 20,
+    "seed": 42,
+    "n_viz": 2
+  }
+}

@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader, TensorDataset
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from models.pod import PODTrainer, PODConfig
 from models.pod_deeponet import BranchNet, PODDeepONet
-from utils.datasets import load_stacked
+from utils.datasets import load_stacked, measure_inference_time
 
 
 def rel_l2(true, pred):
@@ -443,6 +443,14 @@ def main():
         "metrics":  metrics,
         "run_name": RUN_NAME,
     }, os.path.join(RUN_DIR, "model.pt"))
+
+    # Inference time
+    _inf_ms = measure_inference_time(
+        lambda: predict_batch(u0_test_dev, kappa_test_d),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / N_test
 
     metrics["hparams"] = vars(args)
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:

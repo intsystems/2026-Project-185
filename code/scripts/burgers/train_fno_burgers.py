@@ -453,6 +453,14 @@ def main():
         "hparams":     vars(args),
     }, os.path.join(RUN_DIR, "model.pt"))
 
+    # Inference time
+    _inf_ms = measure_inference_time(
+        lambda: predict_batched(model, X_test, DEVICE),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / len(X_test)
+
     metrics["hparams"] = vars(args)
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)

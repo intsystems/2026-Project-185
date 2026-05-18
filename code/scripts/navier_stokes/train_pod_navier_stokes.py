@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader, TensorDataset
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from models.pod import PODTrainer, PODConfig
 from models.pod_deeponet import BranchNet, PODDeepONet
-from utils.datasets import load_ns_stacked
+from utils.datasets import load_ns_stacked, measure_inference_time
 
 
 def rel_l2(true, pred):
@@ -42,9 +42,9 @@ def parse_args():
                    help="One value = specialist; multiple = joint")
     p.add_argument("--run_name", type=str, default=None)
     p.add_argument("--results_dir", type=str, default=str(_PROJECT_ROOT / "TEMPO_results" / "navier_stokes"))
-    p.add_argument("--n_samples", type=int, default=10000,
+    p.add_argument("--n_samples", type=int, default=5000,
                    help="Samples per Re loaded (train + test)")
-    p.add_argument("--n_test_per_re", type=int, default=2000)
+    p.add_argument("--n_test_per_re", type=int, default=1000)
     p.add_argument("--data_dir", type=str, default=os.path.expanduser("~/data/2D/Navier_Stokes"))
     p.add_argument("--max_modes", type=int, default=80)
     p.add_argument("--hidden_dim", type=int, default=256)
@@ -315,6 +315,14 @@ def main():
         "metrics": metrics,
         "run_name": RUN_NAME,
     }, os.path.join(RUN_DIR, "model.pt"))
+
+    # Inference time
+    _inf_ms = measure_inference_time(
+        lambda: predict_batch(u0_test_dev, kappa_test_d),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / N_test
 
     metrics["hparams"] = vars(args)
     metrics["hparams"]["n_epochs_used"] = n_epochs

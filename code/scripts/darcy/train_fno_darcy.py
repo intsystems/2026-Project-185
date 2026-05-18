@@ -29,7 +29,7 @@ _PROJECT_ROOT = _SCRIPT_DIR.parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from neuralop.models import FNO
-from utils.datasets import load_darcy_stacked, DATA_DIR
+from utils.datasets import load_darcy_stacked, DATA_DIR, measure_inference_time
 
 _ALL_BETA = [0.01, 0.1, 1.0, 10.0, 100.0]
 _LOG10_BETA_MIN = np.log10(min(_ALL_BETA))   # -2
@@ -445,6 +445,14 @@ def main():
         "run_name":    RUN_NAME,
         "hparams":     vars(args),
     }, os.path.join(RUN_DIR, "model.pt"))
+
+    # Inference time
+    _inf_ms = measure_inference_time(
+        lambda: predict_batched(model, X_test, DEVICE),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / len(X_test)
 
     metrics["hparams"] = vars(args)
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:

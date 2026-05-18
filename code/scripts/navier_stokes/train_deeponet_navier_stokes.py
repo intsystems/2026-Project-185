@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-from utils.datasets import load_ns_stacked
+from utils.datasets import load_ns_stacked, measure_inference_time
 
 
 def rel_l2(true, pred):
@@ -43,8 +43,8 @@ def parse_args():
     p.add_argument("--re_values", type=int, nargs="+", required=True)
     p.add_argument("--run_name", type=str, default=None)
     p.add_argument("--results_dir", type=str, default=str(_PROJECT_ROOT / "TEMPO_results" / "navier_stokes"))
-    p.add_argument("--n_samples", type=int, default=10000)
-    p.add_argument("--n_test_per_re", type=int, default=2000)
+    p.add_argument("--n_samples", type=int, default=5000)
+    p.add_argument("--n_test_per_re", type=int, default=1000)
     p.add_argument("--data_dir", type=str, default=os.path.expanduser("~/data/2D/Navier_Stokes"))
     p.add_argument("--hidden_dim", type=int, default=256)
     p.add_argument("--n_layers", type=int, default=4)
@@ -385,6 +385,15 @@ def main():
         plt.close()
 
     print(f"Generated {n_viz} reconstruction visualization(s) + {n_viz} 3D visualization(s)")
+
+    # Inference time
+    model.eval()
+    _inf_ms = measure_inference_time(
+        lambda: model(u0_test, kappa_test, xyt),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / N_test
 
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)

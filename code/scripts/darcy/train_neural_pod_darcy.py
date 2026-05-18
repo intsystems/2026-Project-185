@@ -24,7 +24,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from models.regime_basis import FourierRegimeBasis
 from models.fourier_neural_pod import FourierNeuralPODTrainer, FourierNeuralPODConfig
 from models.pod_deeponet import BranchNet
-from utils.datasets import load_darcy_stacked, DATA_DIR
+from utils.datasets import load_darcy_stacked, DATA_DIR, measure_inference_time
 from utils.plotting import (
     plot_error_dist, plot_cross_param_bar, plot_reconstruction_xy,
 )
@@ -429,6 +429,14 @@ def main():
         "metrics":  metrics,
         "run_name": RUN_NAME,
     }, os.path.join(RUN_DIR, "model.pt"))
+
+    # Inference time
+    _inf_ms = measure_inference_time(
+        lambda: predict_batch(a_test, kappa_test),
+        device=DEVICE
+    )
+    metrics["inference_ms_total"] = _inf_ms
+    metrics["inference_ms_per_sample"] = _inf_ms / N_test
 
     metrics["hparams"] = vars(args)
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:

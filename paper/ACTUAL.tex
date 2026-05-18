@@ -311,6 +311,17 @@ NeuralPOD-DeepONet (nonlinear, global, our extension of~\cite{Mou2026}),
 TEMPO(POD) (linear, $M$ regimes), and
 TEMPO(NeuralPOD) (nonlinear, $M$ regimes).
 
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figs/TEMPO_graphical_highlights.png}
+  \caption{\textbf{TEMPO pipeline.}
+    Phase~1 (offline): snapshots are soft-assigned to $M$ regimes via EM,
+    and a dedicated basis $\{\Phi_m\}$ is fitted per regime.
+    Phase~2 (online): a GatingNet routes each input to regime weights;
+    $M$ BranchNets predict expansion coefficients; the output is a weighted
+    sum of local reconstructions.}
+  \label{fig:pipeline}
+\end{figure}
 
 \subsection{Basis Representations}\label{sec:bases}
 
@@ -331,7 +342,8 @@ approximation
 is optimal in the $L^2$ sense among all rank-$K$ affine representations.
 
 For TEMPO(POD), the M-step~\eqref{eq:mstep_phi} is solved analytically:
-set $\phi_0^{(m)} := \bar{s}_m = \sum_i \gamma_{im} s^{(i)}$ and apply SVD to
+set $\phi_0^{(m)} := \bar{s}_m = \frac{1}{N_m}\sum_i \gamma_{im} s^{(i)}$,
+where $N_m = \sum_i \gamma_{im}$, and apply SVD to
 the weighted centered matrix with columns
 $\sqrt{\gamma_{im}}\,(s^{(i)}-\phi_0^{(m)})$.
 This is the closed-form linear analogue of Algorithm~\ref{alg:npod}.
@@ -491,8 +503,9 @@ sharpen and the E-step automatically refines regime assignments in response —
 distinguishing TEMPO from a GMM applied to a fixed feature space.
 When $\kappa$ drives large amplitude variation (as with $\beta\in[0.01,100]$
 in the Darcy experiments), replacing the squared norm with the relative squared norm
-$\|s^{(i)}-\hat{s}_m^{(i)}\|_w^2/\|s^{(i)}\|_w^2$ in both~\eqref{eq:estep}
-and~\eqref{eq:sigma2_calib} gives a scale-invariant analogue.
+$\|s^{(i)}-\hat{s}_m^{(i)}\|_w^2/\|s^{(i)}\|_w^2$ throughout --- in~\eqref{eq:estep},
+\eqref{eq:sigma2_calib}, and~\eqref{eq:mstep_phi} --- keeps E- and M-steps consistent
+under a heteroscedastic likelihood with noise variance proportional to $\|s^{(i)}\|_w^2$.
 When $\kappa$ is observed, the GMM initialization can operate in $\log\kappa$
 space, and an optional $\kappa$-prior term in the E-step anchors assignments
 to the known parameter structure.
@@ -569,8 +582,9 @@ as warm-starting may trap gradient descent in the geometry of the previous regim
 
 \paragraph{Convergence and model selection.}
 EM terminates when $\max_m \Delta_m^{(q)} < \varepsilon_c$.
-The number of regimes $M \in \{2,3,4\}$ is selected by BIC on the GMM fit,
-with mean assignment entropy as a secondary criterion;
+The number of regimes $M \in \{2,3,4\}$ is selected by a two-criterion rule:
+BIC on the TEMPO EM log-likelihood (lower is better, penalises model complexity)
+and mean assignment entropy $H$ (higher gain signals a genuinely new regime);
 see Table~\ref{tab:regime_selection} (Appendix~\ref{app:exp}).
 The complete offline procedure is given in Algorithm~\ref{alg:tempo}.
 
@@ -878,15 +892,71 @@ TEMPO(NeuralPOD)~\textit{(ours)}
 \end{tabular}
 \end{table}
 
+% TABLE 3: Navier-Stokes
+\begin{table}[!htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Relative $L^2$ test error on 2D incompressible Navier-Stokes.}
+  Each per-Re specialist is trained on a single Reynolds number and evaluated on
+  all four; \underline{underlined} entries are in-distribution.
+  Joint methods train on all Re simultaneously.
+  \textbf{Bold}: best per column among jointly-trained methods.
+  (\textit{pend.}): results pending.}
+\label{tab:ns}
+\begin{tabular}{l c c c c c r}
+\toprule
+Method & Train~Re
+  & $\mathrm{Re}{=}100$ & $\mathrm{Re}{=}1000$ & $\mathrm{Re}{=}3600$ & $\mathrm{Re}{=}10000$
+  & Infer.~(ms) \\
+\midrule
+\multicolumn{7}{l}{\textit{Per-Re specialists (single-Re training)}} \\[2pt]
+\multirow{4}{*}{DeepONet~\cite{Lu2019}}
+  & 100   & \underline{1.000} & 1.002 & 1.003 & 1.004 & \multirow{4}{*}{---} \\
+  & 1000  & 1.000 & \underline{1.000} & 1.000 & 1.000 & \\
+  & 3600  & 1.002 & 1.000 & \underline{1.000} & 1.000 & \\
+  & 10000 & 1.001 & 1.000 & 1.000 & \underline{1.000} & \\[4pt]
+\multirow{4}{*}{POD-DeepONet~\cite{Lu2022}}
+  & 100   & \underline{0.082} & 0.748 & 0.865 & 0.877 & \multirow{4}{*}{---} \\
+  & 1000  & 0.667 & \underline{0.129} & 0.671 & 0.812 & \\
+  & 3600  & 0.660 & 0.392 & \underline{0.180} & 0.623 & \\
+  & 10000 & 0.934 & 0.687 & 0.556 & \underline{0.345} & \\[4pt]
+NeuralPOD-DeepONet~\textit{(ours)}
+  & 1000  & 0.762 & \underline{0.198} & 0.607 & 0.761 & --- \\[4pt]
+\multirow{4}{*}{FNO~\cite{Li2021}}
+  & 100   & \underline{0.013} & 0.262 & 0.368 & 0.437 & \multirow{4}{*}{1.50} \\
+  & 1000  & 0.287 & \underline{0.033} & 0.138 & 0.227 & \\
+  & 3600  & 0.381 & 0.150 & \underline{0.039} & 0.128 & \\
+  & 10000 & 0.461 & 0.260 & 0.126 & \underline{0.042} & \\
+\midrule
+\multicolumn{7}{l}{\textit{Joint training (all Re)}} \\[2pt]
+POD-DeepONet~\cite{Lu2022}
+  & all & 0.092 & 0.132 & 0.141 & 0.145 & --- \\
+FNO~\cite{Li2021}
+  & all & \textbf{0.009} & \textbf{0.020} & \textbf{0.024} & \textbf{0.027} & 0.61 \\
+NeuralPOD-DeepONet~\textit{(ours)}
+  & all & \multicolumn{4}{c}{\textit{pend.}} & \textit{pend.} \\
+CNO~\cite{Raonic2023}
+  & all & \multicolumn{4}{c}{\textit{pend.}} & \textit{pend.} \\
+TEMPO(POD)~\textit{(ours)}
+  & $M{=}4$ & 0.105 & 0.153 & 0.167 & 0.181 & \textbf{0.05} \\
+TEMPO(NeuralPOD)~\textit{(ours)}
+  & \textit{pend.} & \multicolumn{4}{c}{\textit{pend.}} & \textit{pend.} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 %==========================================================================
 \subsection{Regime Discovery}
 \label{sec:regime_exp}
 %==========================================================================
 
-We select $M{=}3$ based on BIC and an entropy elbow: $H$ gains $+0.30$
+We select $M{=}3$ based on entropy gain: $H$ increases by $+0.30$
 from $M{=}2$ to $M{=}3$ but only $+0.18$ from $M{=}3$ to $M{=}4$,
-indicating the third regime captures genuine structure that a fourth does
-not (Table~\ref{tab:regime_selection}, Appendix~\ref{app:exp}).
+indicating the third regime captures genuine structure that a fourth does not.
+BIC increases monotonically with $M$ (favouring $M{=}2$ by complexity alone),
+so entropy is the decisive criterion here
+(Table~\ref{tab:regime_selection}, Appendix~\ref{app:exp}).
 Figure~\ref{fig:umap_em} confirms three distinct manifold branches, one
 per discovered regime.
 
@@ -970,14 +1040,17 @@ geometry-driven rather than parameter-driven regime membership.
 \small
 \setlength{\tabcolsep}{12pt}
 \caption{Regime count selection on 1D Burgers'.
-  BIC: EM log-likelihood (higher is better);
-  $H$: mean assignment entropy;
+  BIC $= {-2\log\mathcal{L} + k\log N}$ (lower is better; penalises complexity);
+  $H$: mean assignment entropy (higher gain signals a new genuine regime);
   $\bar{\varepsilon}$: mean relative $L^2$ test error.
-  \textbf{Bold row}: selected configuration ($M{=}3$, chosen by BIC elbow and entropy gain).}
+  BIC increases monotonically, favouring $M{=}2$ by complexity alone.
+  \textbf{Bold row}: selected configuration ($M{=}3$), chosen because the entropy
+  gain $\Delta H{=}0.30$ from $M{=}2{\to}3$ substantially exceeds $\Delta H{=}0.18$
+  from $M{=}3{\to}4$.}
 \label{tab:regime_selection}
 \begin{tabular}{c c c c}
 \toprule
-$M$ & BIC (${\times}10^{4}$) & $H$ & $\bar{\varepsilon}$ \\
+$M$ & BIC (${\times}10^{4}$, $\downarrow$) & $H$ & $\bar{\varepsilon}$ \\
 \midrule
 2          & 3.90 & 0.622 & 0.209 \\
 \textbf{3} & \textbf{4.92} & \textbf{0.920} & 0.222 \\
@@ -1090,12 +1163,6 @@ and Fourier NeuralPOD error.
   Fourier NeuralPOD reconstruction, $|$FNPOD error$|$.}
 \label{fig:basis_reconstruction}
 \end{figure}
-
-\paragraph{Baseline training curves.}
-Figures~\ref{fig:pod_phase2_loss} and~\ref{fig:npod_phase2_loss} show the
-Phase~2 MSE training curves for POD-DeepONet and NeuralPOD-DeepONet on
-1D Burgers' ($\nu{=}1.0$).
-
 
 \paragraph{Error distributions.}
 Figures~\ref{fig:pod_err_dist} and~\ref{fig:npod_err_dist} show the full
@@ -1221,7 +1288,7 @@ show representative predictions from the two TEMPO variants on 2D Darcy flow.
   \tau\bigr)$}
 \label{alg:npod}
 \begin{algorithmic}[1]
-\State $\bar{s}^{(m)} \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,s^{(i)}$
+\State $\bar{s}^{(m)} \leftarrow \displaystyle\frac{1}{N_m}\sum_{i=1}^N \gamma_{im}\,s^{(i)},\quad N_m = \sum_{i=1}^N\gamma_{im}$
   \hfill\Comment{responsibility-weighted mean trajectory}
 \State Train $\phi_0^{(m)}$ by minimizing
   $\displaystyle\sum_j w_j\bigl(\phi_0^{(m)}(y_j) - \bar{s}^{(m)}_j\bigr)^2$
