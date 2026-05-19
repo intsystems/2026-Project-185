@@ -313,7 +313,7 @@ TEMPO(NeuralPOD) (nonlinear, $M$ regimes).
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\textwidth]{figs/TEMPO_graphical_highlights.png}
+  \includegraphics[width=\textwidth]{TEMPO/main/figs/TEMPO_graphical_highlights_v2.png}
   \caption{\textbf{TEMPO pipeline.}
     Phase~1 (offline): snapshots are soft-assigned to $M$ regimes via EM,
     and a dedicated basis $\{\Phi_m\}$ is fitted per regime.
@@ -478,8 +478,8 @@ reconstructions rather than treated as a free hyperparameter:
   \gamma_{im}^{(0)}\,\bigl\|s^{(i)} - \hat{s}_m^{(i)}\bigr\|_w^2,
   \label{eq:sigma2_calib}
 \end{equation}
-which ties the softness of the E-step directly to the quality of the
-initial bases.
+$\sigma^2$ is held fixed throughout EM; improving bases reduce residuals,
+which progressively sharpens regime assignments.
 
 \paragraph{E-step.}
 At iteration $q$, the responsibility of trajectory $i$ for regime $m$
@@ -927,19 +927,24 @@ NeuralPOD-DeepONet~\textit{(ours)}
   & 100   & \underline{0.013} & 0.262 & 0.368 & 0.437 & \multirow{4}{*}{1.50} \\
   & 1000  & 0.287 & \underline{0.033} & 0.138 & 0.227 & \\
   & 3600  & 0.381 & 0.150 & \underline{0.039} & 0.128 & \\
-  & 10000 & 0.461 & 0.260 & 0.126 & \underline{0.042} & \\
+  & 10000 & 0.461 & 0.260 & 0.126 & \underline{0.042} & \\[4pt]
+\multirow{4}{*}{CNO~\cite{Raonic2023}}
+  & 100   & \underline{0.014} & 0.047 & 0.055 & 0.058 & \multirow{4}{*}{1.50} \\
+  & 1000  & 0.027 & \underline{0.028} & 0.033 & 0.035 & \\
+  & 3600  & 0.030 & 0.029 & \underline{0.033} & 0.035 & \\
+  & 10000 & 0.030 & 0.028 & 0.032 & \underline{0.034} & \\
 \midrule
 \multicolumn{7}{l}{\textit{Joint training (all Re)}} \\[2pt]
 POD-DeepONet~\cite{Lu2022}
   & all & 0.092 & 0.132 & 0.141 & 0.145 & --- \\
 FNO~\cite{Li2021}
-  & all & \textbf{0.009} & \textbf{0.020} & \textbf{0.024} & \textbf{0.027} & 0.61 \\
+  & all & \textbf{0.009} & \textbf{0.019} & \textbf{0.024} & \textbf{0.027} & 0.61 \\
 NeuralPOD-DeepONet~\textit{(ours)}
   & all & \multicolumn{4}{c}{\textit{pend.}} & \textit{pend.} \\
 CNO~\cite{Raonic2023}
-  & all & \multicolumn{4}{c}{\textit{pend.}} & \textit{pend.} \\
+  & all & 0.012 & 0.023 & 0.027 & 0.030 & 0.90 \\
 TEMPO(POD)~\textit{(ours)}
-  & $M{=}4$ & 0.105 & 0.153 & 0.167 & 0.181 & \textbf{0.05} \\
+  & $M{=}4$ & 0.097 & 0.144 & 0.155 & 0.170 & \textbf{0.05} \\
 TEMPO(NeuralPOD)~\textit{(ours)}
   & \textit{pend.} & \multicolumn{4}{c}{\textit{pend.}} & \textit{pend.} \\
 \bottomrule

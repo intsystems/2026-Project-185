@@ -67,7 +67,7 @@ def parse_args():
                    help="If set, basis_max_modes = total_modes // M (fair comparison)")
     # Fourier basis extra args
     p.add_argument("--n_epochs_mean",        type=int,   default=500)
-    p.add_argument("--n_epochs_mode",        type=int,   default=500)
+    p.add_argument("--n_epochs_mode",        type=int,   default=170)
     p.add_argument("--fourier_epoch_subset", type=float, default=None,
                    help="Fraction of N to use per mode epoch. Default: 1/M")
 
@@ -474,10 +474,17 @@ def main():
     print(f"Generated {n_viz} reconstruction visualization(s) + {n_viz} 3D visualization(s)")
 
     # Save metrics
+    n_params = sum(p.numel() for p in model_online.parameters())
+    n_params_basis = 0
+    if args.basis_type == "fourier":
+        for t in trainer.trainers:
+            n_params_basis += sum(p.numel() for p in t.basis.parameters())
     metrics = {
         "run_name": RUN_NAME,
         "M": args.M,
         "basis_type": args.basis_type,
+        "n_params": n_params,
+        "n_params_basis": n_params_basis,
         "n_train": int(len(train_idx)),
         "n_test": int(len(test_idx)),
     }

@@ -48,7 +48,7 @@ def parse_args():
     # Fourier basis
     p.add_argument("--max_modes", type=int, default=32)
     p.add_argument("--n_epochs_mean", type=int, default=400)
-    p.add_argument("--n_epochs_mode", type=int, default=400)
+    p.add_argument("--n_epochs_mode", type=int, default=170)
     p.add_argument("--hidden_dim_basis", type=int, default=256)
     p.add_argument("--num_frequencies", type=int, default=96)
     p.add_argument("--scales", type=float, nargs="+", default=[0.5, 2.0, 6.0])

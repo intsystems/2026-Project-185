@@ -374,10 +374,17 @@ def main():
     )
 
     # --- Metrics ---
+    n_params = sum(p.numel() for p in model_online.parameters())
+    n_params_basis = 0
+    if args.basis_type == "fourier":
+        for t in trainer.trainers:
+            n_params_basis += sum(p.numel() for p in t.basis.parameters())
     metrics = {
         "run_name":       RUN_NAME,
         "M":              int(args.M),
         "basis_type":     args.basis_type,
+        "n_params":       n_params,
+        "n_params_basis": n_params_basis,
         "n_train":        int(len(s_train)),
         "n_test":         int(len(s_test)),
         "overall_mean":   float(rel_l2.mean()),
