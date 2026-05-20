@@ -73,7 +73,7 @@
 \begin{abstract}
 Operator learning methods typically approximate the solution map of a physical system with a single global model — an assumption that fails when solutions change character fundamentally across the parameter space.
 
-We propose TEMPO: a framework that identifies latent dynamical regimes in snapshot data via Expectation-Maximization, builds a dedicated basis for each, and learns to route new inputs to the right regime at inference time. Models trained on a single parameter value fail badly on others — errors grow by orders of magnitude out-of-distribution. A single jointly-trained model partially addresses this but ignores underlying structure. TEMPO instead learns regime-specific bases jointly across all parameter values, outperforming the global joint baseline while recovering structure driven by both solution geometry and the physical parameter.
+We propose TEMPO: a framework that identifies latent regimes in snapshot data via Expectation-Maximization, builds a dedicated basis for each, and learns to route new inputs to the right regime at inference time. Models trained on a single parameter value fail badly on others — errors grow by orders of magnitude out-of-distribution. A single jointly-trained model partially addresses this but ignores underlying structure. TEMPO instead learns regime-specific bases jointly across all parameter values, outperforming the global joint baseline while recovering structure driven by both solution geometry and the physical parameter.
 
 \end{abstract}
 
@@ -87,7 +87,7 @@ POD-DeepONet~\cite{Lu2022} — trains a single global model over the entire
 parameter space.
 This works well when solutions form a simple manifold, but breaks down when
 the governing parameter drives \emph{qualitatively distinct} dynamics:
-viscosity separating laminar diffusion from near-discontinuous shocks, or source
+viscosity separating laminar flow from near-discontinuous shocks, or source
 magnitude producing solutions that differ by orders of magnitude in amplitude.
 In these multi-regime settings, a single global basis must compromise between
 incompatible geometries, concentrating error precisely where accurate prediction
@@ -281,7 +281,7 @@ The quality of the final operator is measured by the mean relative $L^2$ error:
 
 
 
-\section{Method}\label{sec:theory}
+\section{Method}\label{sec:method}
 
 
 
@@ -394,7 +394,7 @@ we solve
   \label{eq:neuralpod_loss}
 \end{equation}
 (the global case with uniform weights; the $\gamma$-weighted
-generalisation used in TEMPO is Algorithm~\ref{alg:npod}).
+generalization used in TEMPO is Algorithm~\ref{alg:npod}).
 Mode addition stops when the residual falls below fraction $\tau$ of
 the initial variance,
 \begin{equation}
@@ -461,8 +461,8 @@ the generative model of Definition~\ref{def:generative}.
 
 \paragraph{Initialization.}
 A global POD is computed on all $N$ trajectories; each trajectory is
-projected to a $P$-dimensional coefficient vector
-$\alpha^{(i)} \in \mathbb{R}^P$.
+projected to a $d_0$-dimensional coefficient vector
+$\alpha^{(i)} \in \mathbb{R}^{d_0}$.
 Running a standard GMM on $\{\alpha^{(i)}\}$ yields initial
 responsibilities $\gamma_{im}^{(0)}$, weights $\pi_m^{(0)}$,
 and per-regime statistics $(\mu_m^{(0)}, \Sigma_m^{(0)})$.
@@ -532,6 +532,29 @@ global optimality, TEMPO is a Generalized EM algorithm~\cite{Neal1998},
 which guarantees that the observed-data log-likelihood is non-decreasing
 at every iteration.
 
+\begin{proposition}[Regime Approximation Advantage]\label{prop:advantage}
+For any $\{\gamma_{im}\}\geq 0$ with $\sum_m\gamma_{im}=1$, any $M\geq 1$, any $K\geq 1$:
+\[
+  \varepsilon_{\mathrm{TEMPO}}^K \;\leq\; \varepsilon_{\mathrm{global}}^K,
+\]
+where $\varepsilon_{\mathrm{global}}^K=\min_{P,\mu}\sum_i\|(I{-}P)(s^{(i)}{-}\mu)\|_w^2$
+and $\varepsilon_{\mathrm{TEMPO}}^K=\sum_m\min_{P_m,\mu_m}\sum_i\gamma_{im}\|(I{-}P_m)(s^{(i)}{-}\mu_m)\|_w^2$
+are the global and regime-wise optimal rank-$K$ reconstruction errors.
+Proof: Appendix~\ref{app:proof}.
+\end{proposition}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{figs/theorem_verification.png}
+\caption{Empirical verification of Proposition~\ref{prop:advantage} on 1D Burgers'.
+  \textit{Left}: normalized reconstruction error (log scale); TEMPO lies strictly
+  below the global POD for all $K\geq 1$.
+  \textit{Right}: relative gain
+  $(\varepsilon^K_{\mathrm{global}}-\varepsilon^K_{\mathrm{TEMPO}})/\varepsilon^K_{\mathrm{global}}$;
+  all values are non-negative, with gains of $20$--$39\%$ at $K{=}10$.}
+\label{fig:theorem}
+\end{figure}
+
 \paragraph{Adaptive basis update.}
 Retraining all $M$ NeuralPOD bases at every EM iteration is
 computationally prohibitive.
@@ -561,7 +584,7 @@ moments between consecutive iterations:
          {\|\Sigma_m^{(q-1)}\|_F + \epsilon}.
   \label{eq:Delta}
 \end{equation}
-\noindent where $\epsilon > 0$ is a small numerical stabiliser.
+\noindent where $\epsilon > 0$ is a small numerical stabilizer.
 $\Delta_m^{(q)}$ measures how much the composition of regime $m$ has changed,
 not just the volume of reassignments.
 Two trajectories with very different $\alpha^{(i)}$ swapping regimes
@@ -583,7 +606,7 @@ as warm-starting may trap gradient descent in the geometry of the previous regim
 \paragraph{Convergence and model selection.}
 EM terminates when $\max_m \Delta_m^{(q)} < \varepsilon_c$.
 The number of regimes $M \in \{2,3,4\}$ is selected by a two-criterion rule:
-BIC on the TEMPO EM log-likelihood (lower is better, penalises model complexity)
+BIC on the TEMPO EM log-likelihood (lower is better, penalizes model complexity)
 and mean assignment entropy $H$ (higher gain signals a genuinely new regime);
 see Table~\ref{tab:regime_selection} (Appendix~\ref{app:exp}).
 The complete offline procedure is given in Algorithm~\ref{alg:tempo}.
@@ -625,12 +648,12 @@ Writing $g_m^{(i)} = g_m(u_0^{(i)},\kappa^{(i)})$, the online loss is
       \frac{1}{N}\sum_{i=1}^{N}
       \|s^{(i)} - \hat{s}(\cdot;\,u_0^{(i)},\kappa^{(i)})\|_w^2
     }_{\mathcal{L}_{\mathrm{data}}}
-  +\;\lambda_{\mathrm{KL}}
+  +\;\eta_{\mathrm{KL}}
     \underbrace{
       \frac{1}{N}\sum_{i,m}
       g_m^{(i)}\log\frac{g_m^{(i)}}{\gamma_{im}^*}
     }_{\mathcal{L}_{\mathrm{KL}}}
-  -\;\lambda_{H}
+  -\;\eta_{H}
     \underbrace{
       \frac{1}{N}\sum_{i,m}
       g_m^{(i)}\log g_m^{(i)}
@@ -645,7 +668,7 @@ network cannot discard the discovered structure in pursuit of a
 simpler routing.
 $\mathcal{L}_{\mathrm{ent}}$ prevents collapse to a single expert,
 ensuring all $M$ regime bases contribute.
-The hyperparameters $\lambda_{\mathrm{KL}}, \lambda_H \ge 0$ trade
+The hyperparameters $\eta_{\mathrm{KL}}, \eta_H \ge 0$ trade
 off these objectives.
 
 
@@ -737,7 +760,7 @@ Table~\ref{tab:results} gives the cross-viscosity error matrix.
 Per-$\nu$ specialists are unviable across the full range: a $\nu{=}0.1$
 model degrades from $0.048$ to $0.461$ at $\nu{=}0.001$.
 TEMPO(POD) addresses this by discovering regime structure jointly,
-outperforming the global joint baseline by 13--50\% across all~$\nu$.
+outperforming the joint POD-DeepONet baseline by 13--50\% across all~$\nu$.
 TEMPO(NeuralPOD) recovers the same regimes but does not surpass the joint
 baseline, suggesting nonlinear basis fitting remains harder in the
 multi-regime setting.
@@ -746,10 +769,10 @@ multi-regime setting.
 Table~\ref{tab:darcy} gives the cross-$\beta$ matrix.
 Specialist failure is catastrophic --- Darcy solutions scale linearly
 with~$\beta$, driving cross-parameter errors beyond $1000$.
-TEMPO(POD) reduces error by $3$--$5\times$ over the joint baseline
+TEMPO(POD) reduces error by $3$--$5\times$ over the joint POD-DeepONet baseline
 (e.g., $\beta{=}0.1$: $0.775$ vs.\ $2.557$; $\beta{=}100$: $0.073$
 vs.\ $0.347$).
-TEMPO(NeuralPOD) recovers dramatically over its non-regime baseline
+TEMPO(NeuralPOD) improves substantially over the global NeuralPOD-DeepONet baseline
 ($\beta{=}0.1$: $3.813$ vs.\ $72.9$) but does not match TEMPO(POD).
 Recent methods (FNO, CNO) employ fundamentally different operator learning paradigms
 without explicit basis decomposition; TEMPO's contribution is discovering and
@@ -952,6 +975,18 @@ TEMPO(NeuralPOD)~\textit{(ours)}
 \end{table}
 
 %==========================================================================
+\subsection{Phase 1 Reconstruction Advantage}
+\label{sec:phase1_exp}
+%==========================================================================
+
+Figure~\ref{fig:theorem} empirically verifies Proposition~\ref{prop:advantage}
+on 1D Burgers' ($N{=}1{,}500$, $\nu\in\{0.001,0.1,1.0\}$) with $k$-means regime
+assignments.
+TEMPO achieves $20$--$39\%$ lower reconstruction error than the global POD at $K{=}10$
+modes, with the gap growing in both $M$ and $K$; no violations of the bound were
+observed across all $K\in\{1,\ldots,32\}$.
+
+%==========================================================================
 \subsection{Regime Discovery}
 \label{sec:regime_exp}
 %==========================================================================
@@ -959,7 +994,7 @@ TEMPO(NeuralPOD)~\textit{(ours)}
 We select $M{=}3$ based on entropy gain: $H$ increases by $+0.30$
 from $M{=}2$ to $M{=}3$ but only $+0.18$ from $M{=}3$ to $M{=}4$,
 indicating the third regime captures genuine structure that a fourth does not.
-BIC increases monotonically with $M$ (favouring $M{=}2$ by complexity alone),
+BIC increases monotonically with $M$ (favoring $M{=}2$ by complexity alone),
 so entropy is the decisive criterion here
 (Table~\ref{tab:regime_selection}, Appendix~\ref{app:exp}).
 Figure~\ref{fig:umap_em} confirms three distinct manifold branches, one
@@ -969,8 +1004,8 @@ per discovered regime.
 \centering
 \includegraphics[width=\textwidth]{figs/TEMPO_phase1_burgers_pod_M3.png}
 \caption{TEMPO(POD) regime structure on 1D Burgers' ($M{=}3$, 20 EM iterations).
-  \textit{Left:} UMAP coloured by regime.
-  \textit{Centre:} same embedding coloured by~$\nu$.
+  \textit{Left:} UMAP colored by regime.
+  \textit{Center:} same embedding colored by~$\nu$.
   \textit{Right:} GMM fit in POD coefficient space $(\alpha_1,\alpha_2)$;
   stars mark regime centroids~$\mu_m$.}
 \label{fig:umap_em}
@@ -995,13 +1030,13 @@ When the governing parameter drives qualitative change in solution structure, a 
 TEMPO addresses this by treating regime membership as a latent variable.
 EM discovers $M$ regimes from unlabelled snapshots and fits a dedicated basis to each, without regime supervision.
 Per-parameter specialists achieve low in-distribution error but are unusable across the full parameter range — errors grow by orders of magnitude out-of-distribution.
-TEMPO(POD) trained jointly outperforms a single joint baseline by 31--50\% on Burgers' and up to $3\times$ on Darcy flow, while discovered regimes span multiple parameter values, confirming that the partition reflects solution geometry and physical structure jointly.
+TEMPO(POD) trained jointly outperforms the joint POD-DeepONet baseline by 31--50\% on Burgers' and up to $3\times$ on Darcy flow, while discovered regimes span multiple parameter values, confirming that the partition reflects solution geometry and physical structure jointly.
 TEMPO(NeuralPOD) demonstrates that the regime discovery framework extends naturally to nonlinear bases; closing the gap with TEMPO(POD) in the joint training setting remains an open direction.
 
 Several directions remain open.
 Conditioning the basis functions on $\kappa$ would allow each mode to encode parameter-dependent structure directly.
-Extending TEMPO to higher-dimensional benchmarks will test whether regime discovery generalises beyond one-dimensional shock dynamics.
-Convergence guarantees for Generalized EM under nonlinear basis parameterisation remain an open theoretical problem.
+Extending TEMPO to higher-dimensional benchmarks will test whether regime discovery generalizes beyond one-dimensional shock dynamics.
+Convergence guarantees for Generalized EM under nonlinear basis parameterization remain an open theoretical problem.
 
 
 \clearpage
@@ -1029,7 +1064,7 @@ random sums of sinusoids,
   \quad a_k\sim\mathcal{N}(0,1),\;\phi_k\sim\mathcal{U}[0,2\pi].
 \]
 A $5\,\mathrm{s}$ burn-in (500 simulation steps) discards transient
-behaviour before recording begins.
+behavior before recording begins.
 
 \subsection{Additional Experiments}\label{app:exp}
 
@@ -1045,10 +1080,10 @@ geometry-driven rather than parameter-driven regime membership.
 \small
 \setlength{\tabcolsep}{12pt}
 \caption{Regime count selection on 1D Burgers'.
-  BIC $= {-2\log\mathcal{L} + k\log N}$ (lower is better; penalises complexity);
+  BIC $= {-2\log\mathcal{L} + k\log N}$ (lower is better; penalizes complexity);
   $H$: mean assignment entropy (higher gain signals a new genuine regime);
   $\bar{\varepsilon}$: mean relative $L^2$ test error.
-  BIC increases monotonically, favouring $M{=}2$ by complexity alone.
+  BIC increases monotonically, favoring $M{=}2$ by complexity alone.
   \textbf{Bold row}: selected configuration ($M{=}3$), chosen because the entropy
   gain $\Delta H{=}0.30$ from $M{=}2{\to}3$ substantially exceeds $\Delta H{=}0.18$
   from $M{=}3{\to}4$.}
@@ -1200,7 +1235,7 @@ NeuralPOD-DeepONet on 1D Burgers' ($\nu{=}1.0$).
 \includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_reconstruction.png}
 \caption{POD-DeepONet: representative reconstructions on 1D Burgers'
   ($\nu{=}1.0$). Each row: ground truth (\textit{left}), prediction
-  (\textit{centre}), point-wise absolute error (\textit{right}).}
+  (\textit{center}), point-wise absolute error (\textit{right}).}
 \label{fig:pod_reconstruction}
 \end{figure}
 
@@ -1220,7 +1255,7 @@ show representative space--time predictions from the two TEMPO variants on 1D Bu
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_burgers_reconstruct.png}
 \caption{TEMPO(POD) on 1D Burgers' ($M{=}3$): ground truth (\textit{left}),
-  prediction (\textit{centre}), point-wise absolute error (\textit{right}).}
+  prediction (\textit{center}), point-wise absolute error (\textit{right}).}
 \label{fig:tempo_pod_burgers_rec}
 \end{figure}
 
@@ -1272,7 +1307,7 @@ show representative predictions from the two TEMPO variants on 2D Darcy flow.
 \centering
 \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_darcy_reconstruct.png}
 \caption{TEMPO(POD) on 2D Darcy flow ($M{=}5$): ground truth (\textit{left}),
-  prediction (\textit{centre}), point-wise absolute error (\textit{right}).}
+  prediction (\textit{center}), point-wise absolute error (\textit{right}).}
 \label{fig:tempo_pod_darcy_rec}
 \end{figure}
 
@@ -1283,6 +1318,61 @@ show representative predictions from the two TEMPO variants on 2D Darcy flow.
   Figure~\ref{fig:tempo_pod_darcy_rec}.}
 \label{fig:tempo_npod_darcy_rec}
 \end{figure}
+
+\subsection{Proof of Proposition~\ref{prop:advantage}}\label{app:proof}
+
+\begin{lemma}\label{lem:mean}
+For any rank-$K$ orthoprojector $P$ and any regime $m$,
+\[
+  \sum_i \gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s}_m)\|_w^2
+  =
+  \sum_i \gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s})\|_w^2
+  - N_m\|(I{-}P)(\bar{s}_m{-}\bar{s})\|_w^2.
+\]
+\end{lemma}
+\begin{proof}
+Let $c_m=\bar{s}_m-\bar{s}$.
+Writing $(I{-}P)(s^{(i)}{-}\bar{s}_m)=(I{-}P)(s^{(i)}{-}\bar{s})-(I{-}P)c_m$
+and expanding $\|a-b\|_w^2=\|a\|_w^2-2\langle a,b\rangle_w+\|b\|_w^2$,
+then summing over $i$ with weights $\gamma_{im}$:
+\begin{align*}
+  \sum_i\gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s}_m)\|_w^2
+  &= \sum_i\gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s})\|_w^2 \\
+  &\quad -\;2\Bigl\langle(I{-}P)\!\sum_i\gamma_{im}(s^{(i)}{-}\bar{s}),\;(I{-}P)c_m\Bigr\rangle_w \\
+  &\quad +\;N_m\|(I{-}P)c_m\|_w^2.
+\end{align*}
+Since $\sum_i\gamma_{im}(s^{(i)}{-}\bar{s})=N_mc_m$,
+the cross-term (second line) equals $-2N_m\|(I{-}P)c_m\|_w^2$.
+Adding the quadratic term (third line) gives $-N_m\|(I{-}P)c_m\|_w^2$,
+which is the right-hand side of the identity.
+\end{proof}
+
+\begin{proof}[Proof of Proposition~\ref{prop:advantage}]
+Let $P^*,\bar{s}$ be the globally optimal rank-$K$ projector and mean,
+and $P_m^*,\bar{s}_m$ their regime-$m$ counterparts.
+Since $P_m^*$ minimizes the regime-$m$ objective over all rank-$K$ projectors,
+substituting the (generally suboptimal) $P^*$ cannot decrease it:
+\[
+  \varepsilon_{\mathrm{TEMPO}}^K
+  = \sum_m\sum_i\gamma_{im}\|(I{-}P_m^*)(s^{(i)}{-}\bar{s}_m)\|_w^2
+  \;\leq\;
+  \sum_m\sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s}_m)\|_w^2.
+\]
+By Lemma~\ref{lem:mean}, the inner sum for each $m$ satisfies
+\[
+  \sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s}_m)\|_w^2
+  = \sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s})\|_w^2
+  - N_m\|(I{-}P^*)(\bar{s}_m{-}\bar{s})\|_w^2.
+\]
+Summing this over $m$ and using $\sum_m\gamma_{im}=1$ for each $i$:
+\begin{align*}
+  \sum_m\sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s}_m)\|_w^2
+  &= \sum_i\|(I{-}P^*)(s^{(i)}{-}\bar{s})\|_w^2
+    - \underbrace{\sum_m N_m\|(I{-}P^*)(\bar{s}_m{-}\bar{s})\|_w^2}_{\geq\,0}\\
+  &\leq \sum_i\|(I{-}P^*)(s^{(i)}{-}\bar{s})\|_w^2
+    = \varepsilon_{\mathrm{global}}^K. \qquad\square
+\end{align*}
+\end{proof}
 
 \clearpage
 \subsection{Algorithms}\label{app:alg}
@@ -1298,26 +1388,26 @@ show representative predictions from the two TEMPO variants on 2D Darcy flow.
 \State Train $\phi_0^{(m)}$ by minimizing
   $\displaystyle\sum_j w_j\bigl(\phi_0^{(m)}(y_j) - \bar{s}^{(m)}_j\bigr)^2$
 \State $r^{(0,i)} \leftarrow s^{(i)} - \phi_0^{(m)}(y)$
-  \enspace for all $i$;\enspace $p \leftarrow 0$
+  \enspace for all $i$;\enspace $k \leftarrow 0$
 \State $V_m \leftarrow \displaystyle\sum_{i=1}^N \gamma_{im}\,\|s^{(i)}-\bar{s}^{(m)}\|_w^2$
   \hfill\Comment{initial unmodeled variance}
-\While{$\displaystyle\sum_{i=1}^N \gamma_{im}\,\|r^{(p,i)}\|_w^2
-  \;\ge\; \tau\, V_m$ \textbf{ and } $p < P_{\max}$}
-  \State Jointly minimize over $\phi_{p+1}^{(m)}$ and
-    $\{\lambda_{p+1}^{(m,i)}\}_{i=1}^N$:
+\While{$\displaystyle\sum_{i=1}^N \gamma_{im}\,\|r^{(k,i)}\|_w^2
+  \;\ge\; \tau\, V_m$ \textbf{ and } $k < K_{\max}$}
+  \State Jointly minimize over $\phi_{k+1}^{(m)}$ and
+    $\{\lambda_{k+1}^{(m,i)}\}_{i=1}^N$:
     \[
       \sum_{i=1}^N \gamma_{im}
-      \sum_j w_j\!\left(\lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y_j)
-      - r^{(p,i)}_j\right)^{\!2}
+      \sum_j w_j\!\left(\lambda_{k+1}^{(m,i)}\,\phi_{k+1}^{(m)}(y_j)
+      - r^{(k,i)}_j\right)^{\!2}
     \]
-  \State $r^{(p+1,i)} \leftarrow r^{(p,i)}
-    - \lambda_{p+1}^{(m,i)}\,\phi_{p+1}^{(m)}(y)$
+  \State $r^{(k+1,i)} \leftarrow r^{(k,i)}
+    - \lambda_{k+1}^{(m,i)}\,\phi_{k+1}^{(m)}(y)$
     \enspace for all $i$
-  \State $p \leftarrow p + 1$
+  \State $k \leftarrow k + 1$
 \EndWhile
-\State \Return $P_m \!\leftarrow\! p$,\enspace
+\State \Return $K_m \!\leftarrow\! k$,\enspace
   $\phi_0^{(m)}$,\enspace
-  $\bigl\{\phi_p^{(m)},\,\{\lambda_p^{(m,i)}\}_{i=1}^N\bigr\}_{p=1}^{P_m}$
+  $\bigl\{\phi_k^{(m)},\,\{\lambda_k^{(m,i)}\}_{i=1}^N\bigr\}_{k=1}^{K_m}$
 \end{algorithmic}
 \end{algorithm}
 
@@ -1334,7 +1424,7 @@ show representative predictions from the two TEMPO variants on 2D Darcy flow.
 %
 \Statex \textit{Initialization}
 \State Compute global POD on $\{s^{(i)}\}$;
-  project to $\alpha^{(i)} \in \mathbb{R}^P$ for all $i$
+  project to $\alpha^{(i)} \in \mathbb{R}^{d_0}$ for all $i$
 \State Run GMM-EM on $\{\alpha^{(i)}\}$ $\to$
   $\gamma_{im}^{(0)},\;\pi_m^{(0)},\;\mu_m^{(0)},\;\Sigma_m^{(0)}$
 \For{$m = 1,\ldots,M$}
@@ -1368,14 +1458,14 @@ show representative predictions from the two TEMPO variants on 2D Darcy flow.
         \hfill \textsc{Skip}
     \ElsIf{$\Delta_m^{(q)} < \varepsilon_l$}
       \hfill \textsc{Incremental}
-      \State Compute $r_m^{(P_m)}$ under updated $\gamma^{(q)}$;\;
+      \State Compute $r_m^{(K_m)}$ under updated $\gamma^{(q)}$;\;
         $V_m^{(q)} \leftarrow \sum_i\gamma_{im}^{(q)}\|s^{(i)}{-}\bar{s}_m^{(q)}\|_w^2$
-      \If{$\sum_i\gamma_{im}^{(q)}\|r_m^{(P_m,i)}\|_w^2 \ge \tau\cdot V_m^{(q)}$}
-        \State Train mode $P_m{+}1$;\; $P_m \leftarrow P_m + 1$
+      \If{$\sum_i\gamma_{im}^{(q)}\|r_m^{(K_m,i)}\|_w^2 \ge \tau\cdot V_m^{(q)}$}
+        \State Train mode $K_m{+}1$;\; $K_m \leftarrow K_m + 1$
       \EndIf
-      \If{$\|\phi_{P_m}^{(m)}\|_w^2\cdot\displaystyle\sum_{i=1}^N
-        \gamma_{im}^{(q)}\,\bigl(\lambda_{P_m}^{(m,i)}\bigr)^2 < \varepsilon_p$}
-        \State $P_m \leftarrow P_m - 1$
+      \If{$\|\phi_{K_m}^{(m)}\|_w^2\cdot\displaystyle\sum_{i=1}^N
+        \gamma_{im}^{(q)}\,\bigl(\lambda_{K_m}^{(m,i)}\bigr)^2 < \varepsilon_p$}
+        \State $K_m \leftarrow K_m - 1$
       \EndIf
     \Else
       \hfill \textsc{Full rerun}
