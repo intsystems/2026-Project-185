@@ -1,0 +1,66 @@
+{
+  "burgers/pod_deeponet": {
+    "inference_ms_per_call": 1.0544974356889725,
+    "inference_ms_per_sample": 0.004119130608160049
+  },
+  "burgers/npod_deeponet": {
+    "inference_ms_per_call": 219.72421845421195,
+    "inference_ms_per_sample": 3.4331909133470617
+  },
+  "burgers/fno": {
+    "inference_ms_per_call": 313.23822028934956,
+    "inference_ms_per_sample": 9.788694384042174
+  },
+  "burgers/tempo_pod": {
+    "inference_ms_per_call": 2.3396844044327736,
+    "inference_ms_per_sample": 0.03655756881926209
+  },
+  "burgers/tempo_npod": {
+    "inference_ms_per_call": 2.3166914470493793,
+    "inference_ms_per_sample": 0.03619830386014655
+  },
+  "darcy/pod_deeponet": {
+    "inference_ms_per_call": 0.5909726954996586,
+    "inference_ms_per_sample": 0.0005909726954996586
+  },
+  "darcy/fno": {
+    "inference_ms_per_call": 587.1117954142392,
+    "inference_ms_per_sample": 0.5871117954142392
+  },
+  "darcy/tempo_pod": {
+    "inference_ms_per_call": 1.6322036273777485,
+    "inference_ms_per_sample": 0.00637579541944433
+  },
+  "darcy/tempo_npod": {
+    "inference_ms_per_call": 1.6392908059060574,
+    "inference_ms_per_sample": 0.0064034797105705366
+  },
+  "ns/fno": {
+    "inference_ms_per_call": 150.20533232018352,
+    "inference_ms_per_sample": 0.30041066464036703
+  },
+  "burgers/cno": {
+    "inference_ms_per_call": 1021.3158778846263,
+    "inference_ms_per_sample": 2.0426317557692526
+  },
+  "darcy/npod_deeponet": {
+    "inference_ms_per_call": 31.622901558876038,
+    "inference_ms_per_sample": 0.1581145077943802
+  },
+  "darcy/cno": {
+    "inference_ms_per_call": 2116.3136914372444,
+    "inference_ms_per_sample": 2.1163136914372442
+  },
+  "ns/cno": {
+    "inference_ms_per_call": 236.35147800669074,
+    "inference_ms_per_sample": 0.47270295601338147
+  },
+  "ns/pod_deeponet": {
+    "inference_ms_per_call": 1.2689266353845596,
+    "inference_ms_per_sample": 0.004956744669470936
+  },
+  "ns/npod_deeponet": {
+    "inference_ms_per_call": 304.2506130412221,
+    "inference_ms_per_sample": 4.753915828769095
+  }
+}
