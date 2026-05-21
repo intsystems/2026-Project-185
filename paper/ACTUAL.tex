@@ -1242,7 +1242,7 @@ Figure~\ref{fig:basis_rec} shows representative Phase~1 reconstructions from the
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_phase1.png}
+\includegraphics[width=0.85\textwidth]{TEMPO/main/pictures/npod_phase1.png}
 \caption{Fourier NeuralPOD basis on 1D Burgers' ($\nu{=}1.0$):
   weighted residual norm versus greedy mode count.}
 \label{fig:npod_phase1}
@@ -1250,7 +1250,7 @@ Figure~\ref{fig:basis_rec} shows representative Phase~1 reconstructions from the
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/Neural_POD_rec_basis.png}
+\includegraphics[width=0.85\textwidth]{TEMPO/main/pictures/Neural_POD_rec_basis.png}
 \caption{Fourier NeuralPOD representative reconstructions on 1D Burgers' ($\nu{=}1.0$).}
 \label{fig:basis_rec}
 \end{figure}
@@ -1307,7 +1307,7 @@ test-set error distributions for POD-DeepONet and NeuralPOD-DeepONet on
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_err_dist.png}
+\includegraphics[width=0.8\textwidth]{TEMPO/main/pictures/pod_err_dist.png}
 \caption{POD-DeepONet test-set error distribution on 1D Burgers' ($\nu{=}1.0$):
   error histogram (\textit{left}) and sorted errors (\textit{right}).}
 \label{fig:pod_err_dist}
@@ -1315,7 +1315,7 @@ test-set error distributions for POD-DeepONet and NeuralPOD-DeepONet on
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_err_dist.png}
+\includegraphics[width=0.8\textwidth]{TEMPO/main/pictures/npod_err_dist.png}
 \caption{NeuralPOD-DeepONet test-set error distribution on 1D Burgers'
   ($\nu{=}1.0$). Layout as in Figure~\ref{fig:pod_err_dist}.}
 \label{fig:npod_err_dist}
@@ -1343,6 +1343,18 @@ NeuralPOD-DeepONet on 1D Burgers' ($\nu{=}1.0$).
 \label{fig:npod_reconstruction}
 \end{figure}
 
+\paragraph{TEMPO regime structure (1D Burgers', NeuralPOD basis).}
+Figure~\ref{fig:umap_em_npod} shows the TEMPO(NeuralPOD) regime structure on
+1D Burgers' ($M{=}3$). The partition mirrors TEMPO(POD) but with sharper
+assignments, reflecting the higher expressivity of the NeuralPOD basis.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{figs/TEMPO_phase1_burgers_npod_M3.png}
+\caption{TEMPO(NeuralPOD) on 1D Burgers' ($M{=}3$, $H{=}0.23$, cf.\ $H{=}0.84$ for POD). Layout as in Figure~\ref{fig:umap_em}.}
+\label{fig:umap_em_npod}
+\end{figure}
+
 \paragraph{TEMPO reconstructions (1D Burgers').}
 Figures~\ref{fig:tempo_pod_burgers_rec}--\ref{fig:tempo_npod_burgers_rec}
 show representative space--time predictions from the two TEMPO variants on 1D Burgers'.
@@ -1362,35 +1374,14 @@ show representative space--time predictions from the two TEMPO variants on 1D Bu
 \label{fig:tempo_npod_burgers_rec}
 \end{figure}
 
-\paragraph{TEMPO regime structure (1D Burgers', NeuralPOD basis).}
-Figure~\ref{fig:umap_em_npod} shows the TEMPO(NeuralPOD) regime structure on
-1D Burgers' ($M{=}3$). The partition mirrors TEMPO(POD) but with sharper
-assignments, reflecting the higher expressivity of the NeuralPOD basis.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{figs/TEMPO_phase1_burgers_npod_M3.png}
-\caption{TEMPO(NeuralPOD) on 1D Burgers' ($M{=}3$, $H{=}0.23$, cf.\ $H{=}0.84$ for POD). Layout as in Figure~\ref{fig:umap_em}.}
-\label{fig:umap_em_npod}
-\end{figure}
-
 \paragraph{TEMPO regime structure (2D Darcy flow).}
-Figures~\ref{fig:tempo_phase1_darcy}--\ref{fig:tempo_phase1_darcy_npod} show
-the TEMPO Phase~1 regime structure on 2D Darcy flow for POD and
-NeuralPOD bases ($M{=}4$ shown for interpretability). Regimes span multiple $\beta$ values.
+Figure~\ref{fig:tempo_phase1_darcy} shows the TEMPO(POD) Phase~1 regime structure on 2D Darcy flow ($M{=}4$ shown for interpretability). Regimes span multiple $\beta$ values. TEMPO(NeuralPOD) discovers a nearly identical partition.
 
 \begin{figure}[!htbp]
 \centering
 \includegraphics[width=\textwidth]{figs/TEMPO_phase1_darcy_pod_M4.png}
 \caption{TEMPO(POD) on 2D Darcy flow ($M{=}4$, shown for interpretability; quantitative results in Table~\ref{tab:darcy} use $M{=}5$). Layout as in Figure~\ref{fig:umap_em}.}
 \label{fig:tempo_phase1_darcy}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{figs/TEMPO_phase1_darcy_npod_M4.png}
-\caption{TEMPO(NeuralPOD) on 2D Darcy flow ($M{=}4$, shown for interpretability; quantitative results in Table~\ref{tab:darcy} use $M{=}5$). Layout as in Figure~\ref{fig:umap_em}.}
-\label{fig:tempo_phase1_darcy_npod}
 \end{figure}
 
 \paragraph{TEMPO reconstructions (2D Darcy flow).}
@@ -1442,7 +1433,7 @@ Figures~\ref{fig:ns_reconstruction} and~\ref{fig:ns_reconstruction_3d} show repr
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{figs/ns_reconstruction_3d_sample0.png}
+\includegraphics[width=0.75\textwidth]{figs/ns_reconstruction_3d_sample0.png}
 \caption{TEMPO(POD) on 2D Navier-Stokes ($M{=}4$): 3D vorticity field visualization.}
 \label{fig:ns_reconstruction_3d}
 \end{figure}
