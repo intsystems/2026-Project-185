@@ -73,7 +73,7 @@
 \begin{abstract}
 Operator learning methods typically approximate the solution map of a physical system with a single global model — an assumption that fails when solutions change character fundamentally across the parameter space.
 
-We propose TEMPO: a framework that identifies latent regimes in snapshot data via Expectation-Maximization, builds a dedicated basis for each, and learns to route new inputs to the right regime at inference time. Models trained on a single parameter value fail badly on others — errors grow by orders of magnitude out-of-distribution. A single jointly-trained model partially addresses this but ignores underlying structure. TEMPO instead learns regime-specific bases jointly across all parameter values, outperforming the global joint baseline while recovering structure driven by both solution geometry and the physical parameter.
+We propose TEMPO: a framework that identifies latent regimes in snapshot data via Expectation-Maximization, builds a dedicated basis for each, and learns to route new inputs to the right regime at inference time. Models trained on a single parameter value fail badly on others — errors grow by orders of magnitude out-of-distribution. A single jointly-trained model partially addresses this but ignores underlying structure. TEMPO instead learns regime-specific bases jointly across all parameter values, outperforming the global joint baseline on Burgers' and Darcy flow, while recovering structure driven by both solution geometry and the physical parameter.
 
 \end{abstract}
 
@@ -125,20 +125,26 @@ routing new inputs to the correct regime at inference.
 
 \textbf{Contributions:}
 \begin{itemize}[leftmargin=1.5em]
-  \item A Gaussian mixture model with EM that discovers $M$ latent regimes
-    and fits a dedicated NeuralPOD basis per regime, requiring no regime labels.
-  \item NeuralPOD-DeepONet: the first deployable operator built on the
-    NeuralPOD basis of~\cite{Mou2026}, pairing it with a branch network that
-    predicts mode coefficients for unseen inputs.
-  \item An adaptive basis update rule based on a distribution-shift criterion,
-    which determines when each regime's basis warrants retraining and avoids
-    redundant computation across EM iterations.
-  \item On 1D Burgers' and 2D Darcy flow, per-parameter specialists achieve
-    low in-distribution error but fail catastrophically outside their training
-    value; TEMPO(POD) trained jointly achieves lower average error across the
-    full parameter range than any single-parameter specialist and outperforms
-    a jointly-trained model without regime discovery, with discovered regimes
-    reflecting both solution geometry and physical parameter structure.
+  \item \textbf{TEMPO framework.} A two-phase mixture-of-operators for
+    parametric PDEs: an offline EM that discovers $M$ latent regimes from
+    unlabelled snapshots and fits a dedicated orthogonal (POD) or nonlinear
+    (NeuralPOD) basis to each; an online phase where a GatingNet and $M$
+    BranchNets are trained with a KL penalty that anchors routing to the
+    offline regime partition.
+
+  \item \textbf{Adaptive basis update.} A distribution-shift criterion that
+    monitors moment changes in regime composition across EM iterations and
+    selects per-regime between full retraining, incremental mode
+    addition/pruning, or skipping.
+
+  \item \textbf{Theoretical guarantee.} Regime-local bases achieve
+    reconstruction error no greater than the global rank-$K$ optimum for
+    any soft-assignment matrix and any $M$, $K$
+    (Proposition~\ref{prop:advantage}).
+
+  \item \textbf{Experiments.} On 1D Burgers' and 2D Darcy flow, TEMPO(POD)
+    reduces error by $13$--$50\%$ over the jointly-trained POD-DeepONet
+    baseline, while per-parameter specialists fail badly out-of-distribution.
 \end{itemize}
 
 
@@ -311,18 +317,6 @@ NeuralPOD-DeepONet (nonlinear, global, our extension of~\cite{Mou2026}),
 TEMPO(POD) (linear, $M$ regimes), and
 TEMPO(NeuralPOD) (nonlinear, $M$ regimes).
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\textwidth]{TEMPO/main/figs/TEMPO_graphical_highlights_v2.png}
-  \caption{\textbf{TEMPO pipeline.}
-    Phase~1 (offline): snapshots are soft-assigned to $M$ regimes via EM,
-    and a dedicated basis $\{\Phi_m\}$ is fitted per regime.
-    Phase~2 (online): a GatingNet routes each input to regime weights;
-    $M$ BranchNets predict expansion coefficients; the output is a weighted
-    sum of local reconstructions.}
-  \label{fig:pipeline}
-\end{figure}
-
 \subsection{Basis Representations}\label{sec:bases}
 
 
@@ -435,14 +429,10 @@ The prediction at any $(x,t) \in \Omega \times \mathcal{T}$ is
 
 \subsubsection{NeuralPOD-DeepONet}\label{sec:neuralpod_deeponet}
 
-Mou et al.~\cite{Mou2026} introduce NeuralPOD as a dimensionality
-reduction for PDE solutions, establishing the greedy basis-fitting
-procedure of Section~\ref{sec:neuralpod_basis}.
-However, they do not construct a deployable solution operator: no
-network is proposed to predict the mode coefficients for an unseen
-initial condition.
-We close this gap by substituting the NeuralPOD basis into the
-POD-DeepONet framework; we call this combination \emph{NeuralPOD-DeepONet}.
+Mou et al.~\cite{Mou2026} introduce NeuralPOD and pair it with a
+DeepONet branch network to predict mode coefficients for unseen inputs.
+We adopt this combination, which we refer to as \emph{NeuralPOD-DeepONet},
+as a single-regime baseline and as the per-regime basis learner within TEMPO(NeuralPOD).
 
 The procedure follows POD-DeepONet exactly with the Fourier NeuralPOD basis substituted for POD.
 Offline fitting yields coefficients $\boldsymbol{\lambda}^{(i)} \in \mathbb{R}^K$; online, a branch network minimizes~\eqref{eq:pod_branch_loss} and prediction follows~\eqref{eq:pod_predict}.
@@ -468,7 +458,7 @@ responsibilities $\gamma_{im}^{(0)}$, weights $\pi_m^{(0)}$,
 and per-regime statistics $(\mu_m^{(0)}, \Sigma_m^{(0)})$.
 Each regime basis $\Phi_m^{(0)}$ is then fitted to the
 responsibility-weighted ensemble: for TEMPO(NeuralPOD) via
-\textsc{WeightedNeuralPOD} (Algorithm~\ref{alg:npod}); for TEMPO(POD)
+\textsc{NeuralBasis} (Algorithm~\ref{alg:npod}); for TEMPO(POD)
 via the weighted SVD of Section~\ref{sec:bases}.
 The noise level $\sigma^2$ is calibrated from the initial
 reconstructions rather than treated as a free hyperparameter:
@@ -525,7 +515,7 @@ and a weighted reconstruction problem for each basis:
   \label{eq:mstep_phi}
 \end{equation}
 solved by weighted SVD for TEMPO(POD) or
-\textsc{WeightedNeuralPOD} (Algorithm~\ref{alg:npod}) for
+\textsc{NeuralBasis} (Algorithm~\ref{alg:npod}) for
 TEMPO(NeuralPOD).
 Since gradient descent solves the NeuralPOD subproblem without guaranteeing
 global optimality, TEMPO is a Generalized EM algorithm~\cite{Neal1998},
@@ -537,8 +527,11 @@ For any $\{\gamma_{im}\}\geq 0$ with $\sum_m\gamma_{im}=1$, any $M\geq 1$, any $
 \[
   \varepsilon_{\mathrm{TEMPO}}^K \;\leq\; \varepsilon_{\mathrm{global}}^K,
 \]
-where $\varepsilon_{\mathrm{global}}^K=\min_{P,\mu}\sum_i\|(I{-}P)(s^{(i)}{-}\mu)\|_w^2$
-and $\varepsilon_{\mathrm{TEMPO}}^K=\sum_m\min_{P_m,\mu_m}\sum_i\gamma_{im}\|(I{-}P_m)(s^{(i)}{-}\mu_m)\|_w^2$
+where
+\begin{align*}
+  \varepsilon_{\mathrm{global}}^K &= \min_{\substack{P\,\mathrm{rank\text{-}}K\\\mu}}\sum_i\|(I{-}P)(s^{(i)}{-}\mu)\|_w^2, \\
+  \varepsilon_{\mathrm{TEMPO}}^K  &= \sum_m\min_{\substack{P_m\,\mathrm{rank\text{-}}K\\\mu_m}}\sum_i\gamma_{im}\|(I{-}P_m)(s^{(i)}{-}\mu_m)\|_w^2
+\end{align*}
 are the global and regime-wise optimal rank-$K$ reconstruction errors.
 Proof: Appendix~\ref{app:proof}.
 \end{proposition}
@@ -604,11 +597,12 @@ The \textsc{Full rerun} case uses a cold-start random initialization,
 as warm-starting may trap gradient descent in the geometry of the previous regime.
 
 \paragraph{Convergence and model selection.}
+The number of regimes $M$ is selected by two criteria: BIC on the EM log-likelihood
+(penalizes complexity) and mean assignment entropy $H$. When they conflict, entropy
+is decisive: a large gain $\Delta H$ from $M$ to $M{+}1$ signals a new regime.
 EM terminates when $\max_m \Delta_m^{(q)} < \varepsilon_c$.
-The number of regimes $M \in \{2,3,4\}$ is selected by a two-criterion rule:
-BIC on the TEMPO EM log-likelihood (lower is better, penalizes model complexity)
-and mean assignment entropy $H$ (higher gain signals a genuinely new regime);
-see Table~\ref{tab:regime_selection} (Appendix~\ref{app:exp}).
+Selected values are $M{=}3$ (Burgers'), $M{=}4$ (Navier-Stokes), and $M{=}5$ (Darcy);
+details for Burgers' are in Table~\ref{tab:regime_selection} (Appendix~\ref{app:exp}).
 The complete offline procedure is given in Algorithm~\ref{alg:tempo}.
 
 \subsection{TEMPO: Online Gated Operator}\label{sec:online}
@@ -675,7 +669,14 @@ off these objectives.
 
 
 
-
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{TEMPO/main/figs/TEMPO_graphical_highlights_v2.png}
+  \caption{\textbf{TEMPO pipeline.}
+    Offline: EM discovers $M$ regimes, each with a dedicated basis $\{\Phi_m\}$.
+    Online: a GatingNet and $M$ BranchNets produce a weighted reconstruction.}
+  \label{fig:pipeline}
+\end{figure}
 
 \section{Computational Experiments}
 \label{sec:exp}
@@ -686,7 +687,7 @@ structure from unlabelled snapshots;
 (ii)~locally adapted bases achieve lower reconstruction error than a
 single global basis at equal mode count;
 (iii)~a jointly-trained gated operator with regime-specific bases outperforms
-a single jointly-trained basis without regime discovery.
+a single jointly-trained basis on benchmarks with structured regimes.
 
 \subsection{Experimental Setup}
 \label{sec:setup}
@@ -719,8 +720,8 @@ random sum of Gaussians, and $\beta\in\{0.01,\,0.1,\,1.0,\,10.0,\,100.0\}$
 is the constant source term.
 Each value provides $N{=}8{,}000$ training and $1{,}000$ test samples
 discretised on a $128{\times}128$ uniform grid ($N_y{=}16{,}384$ spatial points),
-$40{,}000$ trajectories in total.
-The operator maps $a(x)$ to the pressure solution $u(x)$.
+$40{,}000$ samples in total.
+The operator maps $a(x)$ to the pressure solution $u(x)$; as a steady-state problem, $N_t{=}1$ and there is no time dependence.
 
 \textbf{2D incompressible Navier-Stokes.}
 \begin{equation}
@@ -749,6 +750,7 @@ TEMPO(POD) and TEMPO(NeuralPOD) (regime-aware bases discovered via EM, routed by
 gating network). Per-parameter specialists serve as performance ceilings.
 All methods implemented by the authors.
 Evaluation: mean relative $L^2$ error~\eqref{eq:metric} per parameter value.
+Inference times measured on a single NVIDIA RTX A5000 GPU, per sample.
 
 %==========================================================================
 \subsection{Main Results}
@@ -761,9 +763,12 @@ Per-$\nu$ specialists are unviable across the full range: a $\nu{=}0.1$
 model degrades from $0.048$ to $0.461$ at $\nu{=}0.001$.
 TEMPO(POD) addresses this by discovering regime structure jointly,
 outperforming the joint POD-DeepONet baseline by 13--50\% across all~$\nu$.
-TEMPO(NeuralPOD) recovers the same regimes but does not surpass the joint
-baseline, suggesting nonlinear basis fitting remains harder in the
-multi-regime setting.
+TEMPO(NeuralPOD) does not surpass the joint baseline. NeuralPOD-DeepONet
+already underperforms POD-DeepONet in the single-regime case ($0.229$
+vs.\ $0.048$ at $\nu{=}0.1$): the branch network finds NeuralPOD coefficients
+harder to predict than POD projections. In TEMPO this is amplified: each EM
+iteration fits $M$ NeuralPOD bases from scratch, and errors in early
+iterations feed back through the responsibilities into later ones.
 
 \paragraph{2D Darcy flow.}
 Table~\ref{tab:darcy} gives the cross-$\beta$ matrix.
@@ -778,6 +783,12 @@ Recent methods (FNO, CNO) employ fundamentally different operator learning parad
 without explicit basis decomposition; TEMPO's contribution is discovering and
 leveraging latent regime structure through interpretable, locally-adapted bases.
 
+\paragraph{2D Navier-Stokes.}
+Table~\ref{tab:ns} gives the cross-Re error matrix.
+TEMPO(POD) matches the joint POD-DeepONet baseline within $5$--$17\%$ across all Re but does not improve over it.
+On this benchmark, solutions at different Re share enough structure for a single global basis to be competitive, and dedicated per-regime bases bring no clear gain.
+TEMPO(NeuralPOD) ($\kappa$-initialised, $M{=}4$) converges but remains worse than TEMPO(POD).
+
 % TABLE 1: Burgers
 \begin{table}[!htbp]
 \centering
@@ -790,49 +801,51 @@ leveraging latent regime structure through interpretable, locally-adapted bases.
   All jointly-trained methods use $\nu\in\{0.001,0.1,1.0\}$.
   \textbf{Bold}: best per column among jointly-trained methods.}
 \label{tab:results}
-\begin{tabular}{l c c c c}
+\begin{tabular}{l c c c c r}
 \toprule
 Method & Train~$\nu$
-  & $\nu{=}0.001$ & $\nu{=}0.1$ & $\nu{=}1.0$ \\
+  & $\nu{=}0.001$ & $\nu{=}0.1$ & $\nu{=}1.0$ & Infer.~(ms) \\
 \midrule
-\multicolumn{5}{l}{\textit{Per-$\nu$ specialists (single-viscosity training)}} \\[2pt]
+\multicolumn{6}{l}{\textit{Per-$\nu$ specialists (single-viscosity training)}} \\[2pt]
 \multirow{3}{*}{DeepONet~\cite{Lu2019}}
-  & 0.001 & \underline{0.536} & 0.474 & 0.382 \\
-  & 0.1   & 0.535 & \underline{0.471} & 0.349 \\
-  & 1.0   & 0.547 & 0.483 & \underline{0.283} \\[4pt]
+  & 0.001 & \underline{0.536} & 0.474 & 0.382 & \multirow{3}{*}{0.037} \\
+  & 0.1   & 0.535 & \underline{0.471} & 0.349 & \\
+  & 1.0   & 0.547 & 0.483 & \underline{0.283} & \\[4pt]
 \multirow{4}{*}{POD-DeepONet~\cite{Lu2022}}
-  & 0.001 & \underline{0.273} & 0.297 & 0.639 \\
-  & 0.01  & 0.274 & 0.274 & 0.614 \\
-  & 0.1   & 0.349 & \underline{0.048} & 0.344 \\
-  & 1.0   & 0.461 & 0.260 & \underline{0.025} \\[4pt]
+  & 0.001 & \underline{0.273} & 0.297 & 0.639 & \multirow{4}{*}{0.004} \\
+  & 0.01  & 0.274 & 0.274 & 0.614 & \\
+  & 0.1   & 0.349 & \underline{0.048} & 0.344 & \\
+  & 1.0   & 0.461 & 0.260 & \underline{0.025} & \\[4pt]
 \multirow{4}{*}{NeuralPOD-DeepONet~\textit{(ours)}}
-  & 0.001 & \underline{0.392} & 0.288 & 0.535 \\
-  & 0.01  & 0.391 & 0.284 & 0.541 \\
-  & 0.1   & 0.426 & \underline{0.229} & 0.371 \\
-  & 1.0   & 0.483 & 0.315 & \underline{0.183} \\[4pt]
+  & 0.001 & \underline{0.392} & 0.288 & 0.535 & \multirow{4}{*}{3.53} \\
+  & 0.01  & 0.391 & 0.284 & 0.541 & \\
+  & 0.1   & 0.426 & \underline{0.229} & 0.371 & \\
+  & 1.0   & 0.483 & 0.315 & \underline{0.183} & \\[4pt]
 \multirow{4}{*}{FNO~\cite{Li2021}}
-  & 0.001 & \underline{0.426} & 0.529 & 0.623 \\
-  & 0.01  & 0.454 & 0.401 & 0.492 \\
-  & 0.1   & 0.650 & \underline{0.304} & 0.521 \\
-  & 1.0   & 1.161 & 0.919 & \underline{0.158} \\[4pt]
+  & 0.001 & \underline{0.426} & 0.529 & 0.623 & \multirow{4}{*}{9.90} \\
+  & 0.01  & 0.454 & 0.401 & 0.492 & \\
+  & 0.1   & 0.650 & \underline{0.304} & 0.521 & \\
+  & 1.0   & 1.161 & 0.919 & \underline{0.158} & \\[4pt]
 \multirow{3}{*}{CNO~\cite{Raonic2023} \small{(2.0M)}}
-  & 0.01  & 0.687 & 0.955 & 2.344 \\
-  & 0.1   & 0.983 & \underline{0.199} & 0.471 \\
-  & 1.0   & 1.870 & 1.084 & \underline{0.125} \\
+  & 0.01  & 0.687 & 0.955 & 2.344 & \multirow{3}{*}{2.14} \\
+  & 0.1   & 0.983 & \underline{0.199} & 0.471 & \\
+  & 1.0   & 1.870 & 1.084 & \underline{0.125} & \\
 \midrule
-\multicolumn{5}{l}{\textit{Joint training ($\nu\in\{0.001,0.1,1.0\}$)}} \\[2pt]
+\multicolumn{6}{l}{\textit{Joint training ($\nu\in\{0.001,0.1,1.0\}$)}} \\[2pt]
 DeepONet~\cite{Lu2019}
-  & all & 0.533 & 0.472 & 0.289 \\
+  & all & 0.533 & 0.472 & 0.289 & 0.037 \\
 POD-DeepONet~\cite{Lu2022}
-  & all & 0.460 & 0.339 & 0.210 \\
+  & all & 0.460 & 0.339 & 0.210 & \textbf{0.004} \\
 FNO~\cite{Li2021}
-  & all & 0.427 & 0.298 & 0.202 \\
+  & all & 0.427 & 0.298 & 0.202 & 9.90 \\
 CNO~\cite{Raonic2023} \small{(2.0M)}
-  & all & 0.361 & \textbf{0.162} & \textbf{0.133} \\
-TEMPO(POD)~\textit{(ours)}
-  & $M{=}3$ & \textbf{0.317} & 0.168 & 0.182 \\
-TEMPO(NeuralPOD)~\textit{(ours)}
-  & $M{=}3$ & 0.542 & 0.456 & 0.288 \\
+  & all & 0.361 & 0.162 & \textbf{0.133} & 2.14 \\
+\multirow{2}{*}{TEMPO(POD)~\textit{(ours)}}
+  & $M{=}2$ & 0.319 & \textbf{0.150} & 0.159 & \multirow{2}{*}{0.025} \\
+  & $M{=}3$ & \textbf{0.317} & 0.168 & 0.182 & \\
+\multirow{2}{*}{TEMPO(NeuralPOD)~\textit{(ours)}}
+  & $M{=}2$ & 0.536 & 0.458 & 0.326 & \multirow{2}{*}{0.024} \\
+  & $M{=}3$ & 0.542 & 0.456 & 0.288 & \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -852,65 +865,65 @@ TEMPO(NeuralPOD)~\textit{(ours)}
   is excluded from joint training~(\textemdash).
   \textbf{Bold}: best per column among jointly-trained methods.}
 \label{tab:darcy}
-\begin{tabular}{l c c c c c c}
+\begin{tabular}{l c c c c c c r}
 \toprule
 Method & Train~$\beta$
   & $\beta{=}0.01$ & $\beta{=}0.1$ & $\beta{=}1.0$
-  & $\beta{=}10$ & $\beta{=}100$ \\
+  & $\beta{=}10$ & $\beta{=}100$ & Infer.~(ms) \\
 \midrule
-\multicolumn{7}{l}{\textit{Per-$\beta$ specialists (single-value training)}} \\[2pt]
+\multicolumn{8}{l}{\textit{Per-$\beta$ specialists (single-value training)}} \\[2pt]
 \multirow{5}{*}{DeepONet~\cite{Lu2019}}
-  & 0.01  & \underline{4.197} & 0.615 & 0.944 & 0.994 & 0.999 \\
-  & 0.1   & ${>}10$  & \underline{0.851} & 0.875 & 0.987 & 0.999 \\
-  & 1.0   & ${>}10$  & ${>}1$   & \underline{0.433} & 0.902 & 0.972 \\
-  & 10    & ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.243} & 0.705 \\
-  & 100   & ${>}1000$& ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.078} \\[4pt]
+  & 0.01  & \underline{4.197} & 0.615 & 0.944 & 0.994 & 0.999 & \multirow{5}{*}{0.025} \\
+  & 0.1   & ${>}10$  & \underline{0.851} & 0.875 & 0.987 & 0.999 & \\
+  & 1.0   & ${>}10$  & ${>}1$   & \underline{0.433} & 0.902 & 0.972 & \\
+  & 10    & ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.243} & 0.705 & \\
+  & 100   & ${>}1000$& ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.078} & \\[4pt]
 \multirow{5}{*}{POD-DeepONet~\cite{Lu2022}}
-  & 0.01  & \underline{0.449} & 0.791 & 0.961 & 0.996 & ${>}1$ \\
-  & 0.1   & ${>}1$   & \underline{0.148} & 0.871 & 0.986 & 0.999 \\
-  & 1.0   & ${>}10$  & ${>}1$   & \underline{0.048} & 0.897 & 0.990 \\
-  & 10    & ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.035} & 0.900 \\
-  & 100   & ${>}1000$& ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.042} \\
+  & 0.01  & \underline{0.449} & 0.791 & 0.961 & 0.996 & ${>}1$ & \multirow{5}{*}{0.001} \\
+  & 0.1   & ${>}1$   & \underline{0.148} & 0.871 & 0.986 & 0.999 & \\
+  & 1.0   & ${>}10$  & ${>}1$   & \underline{0.048} & 0.897 & 0.990 & \\
+  & 10    & ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.035} & 0.900 & \\
+  & 100   & ${>}1000$& ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.042} & \\
 \multirow{5}{*}{NeuralPOD-DeepONet~\textit{(ours)}}
-  & 0.01  & \underline{1.407} & 0.786 & 0.962 & 0.996 & ${>}1$ \\
-  & 0.1   & ${>}1$   & \underline{0.421} & 0.902 & 0.989 & 0.999 \\
-  & 1.0   & ${>}10$  & ${>}1$   & \underline{0.135} & 0.901 & 0.990 \\
-  & 10    & ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.050} & 0.900 \\
-  & 100   & ${>}1000$& ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.037} \\[4pt]
+  & 0.01  & \underline{1.407} & 0.786 & 0.962 & 0.996 & ${>}1$ & \multirow{5}{*}{0.168} \\
+  & 0.1   & ${>}1$   & \underline{0.421} & 0.902 & 0.989 & 0.999 & \\
+  & 1.0   & ${>}10$  & ${>}1$   & \underline{0.135} & 0.901 & 0.990 & \\
+  & 10    & ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.050} & 0.900 & \\
+  & 100   & ${>}1000$& ${>}100$ & ${>}10$  & ${>}1$   & \underline{0.037} & \\[4pt]
 \multirow{5}{*}{FNO~\cite{Li2021}}
-  & 0.01  & \underline{0.529} & 0.791 & 0.967 & 0.997 & 0.9998 \\
-  & 0.1   & 6.26  & \underline{0.144} & 0.877 & 0.988 & 0.999 \\
-  & 1.0   & 73.1  & 8.41  & \underline{0.034} & 0.909 & 0.992 \\
-  & 10    & ${>}100$ & 72.6  & 8.18  & \underline{0.013} & 0.900 \\
-  & 100   & ${>}1000$ & 256.3 & 43.2  & 6.13  & \underline{0.008} \\[4pt]
+  & 0.01  & \underline{0.529} & 0.791 & 0.967 & 0.997 & 0.9998 & \multirow{5}{*}{0.587} \\
+  & 0.1   & 6.26  & \underline{0.144} & 0.877 & 0.988 & 0.999 & \\
+  & 1.0   & 73.1  & 8.41  & \underline{0.034} & 0.909 & 0.992 & \\
+  & 10    & ${>}100$ & 72.6  & 8.18  & \underline{0.013} & 0.900 & \\
+  & 100   & ${>}1000$ & 256.3 & 43.2  & 6.13  & \underline{0.008} & \\[4pt]
 \multirow{4}{*}{CNO~\cite{Raonic2023} \small{(2.0M)}}
-  & 0.01  & \underline{0.388} & 0.929 & 1.000 & 1.001 & 1.000 \\
-  & 0.1   & 10.6  & \underline{0.125} & 0.948 & 1.004 & 1.002 \\
-  & 1.0   & 67.0  & 7.84  & \underline{0.024} & 0.896 & 0.989 \\
-  & 10    & ${>}1000$ & 99.1  & 8.37  & \underline{0.009} & 0.898 \\
+  & 0.01  & \underline{0.388} & 0.929 & 1.000 & 1.001 & 1.000 & \multirow{4}{*}{2.24} \\
+  & 0.1   & 10.6  & \underline{0.125} & 0.948 & 1.004 & 1.002 & \\
+  & 1.0   & 67.0  & 7.84  & \underline{0.024} & 0.896 & 0.989 & \\
+  & 10    & ${>}1000$ & 99.1  & 8.37  & \underline{0.009} & 0.898 & \\
 \midrule
-\multicolumn{7}{l}{\textit{Joint training ($\beta\in\{0.1,1,10,100\}$)}} \\[2pt]
+\multicolumn{8}{l}{\textit{Joint training ($\beta\in\{0.1,1,10,100\}$)}} \\[2pt]
 DeepONet~\cite{Lu2019}
   & all
-  & \textemdash & 76.53 & 8.503 & 1.352 & 0.493 \\
+  & \textemdash & 76.53 & 8.503 & 1.352 & 0.493 & 0.025 \\
 POD-DeepONet~\cite{Lu2022}
   & all
-  & \textemdash & 2.557 & 0.363 & 0.181 & 0.347 \\
+  & \textemdash & 2.557 & 0.363 & 0.181 & 0.347 & \textbf{0.001} \\
 NeuralPOD-DeepONet~\textit{(ours)}
   & all
-  & \textemdash & 72.9 & 6.92 & 0.357 & 0.345 \\
+  & \textemdash & 72.9 & 6.92 & 0.357 & 0.345 & 0.168 \\
 FNO~\cite{Li2021}
   & all
-  & \textemdash & 0.380 & 0.083 & 0.023 & 0.008 \\
+  & \textemdash & 0.380 & 0.083 & 0.023 & 0.008 & 0.587 \\
 CNO~\cite{Raonic2023} \small{(2.0M)}
   & all
-  & \textemdash & \textbf{0.133} & \textbf{0.026} & \textbf{0.008} & \textbf{0.005} \\
+  & \textemdash & \textbf{0.133} & \textbf{0.026} & \textbf{0.008} & \textbf{0.005} & 2.24 \\
 TEMPO(POD)~\textit{(ours)}
   & $M{=}5$
-  & \textemdash & 0.775 & 0.178 & 0.136 & 0.073 \\
+  & \textemdash & 0.775 & 0.178 & 0.136 & 0.073 & 0.006 \\
 TEMPO(NeuralPOD)~\textit{(ours)}
   & $M{=}5$
-  & \textemdash & 3.813 & 0.549 & 0.322 & 0.311 \\
+  & \textemdash & 3.813 & 0.549 & 0.322 & 0.311 & 0.006 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -925,7 +938,7 @@ TEMPO(NeuralPOD)~\textit{(ours)}
   all four; \underline{underlined} entries are in-distribution.
   Joint methods train on all Re simultaneously.
   \textbf{Bold}: best per column among jointly-trained methods.
-  (\textit{pend.}): results pending.}
+  $^\dagger$\,kappa-initialised variant.}
 \label{tab:ns}
 \begin{tabular}{l c c c c c r}
 \toprule
@@ -935,41 +948,41 @@ Method & Train~Re
 \midrule
 \multicolumn{7}{l}{\textit{Per-Re specialists (single-Re training)}} \\[2pt]
 \multirow{4}{*}{DeepONet~\cite{Lu2019}}
-  & 100   & \underline{1.000} & 1.002 & 1.003 & 1.004 & \multirow{4}{*}{---} \\
+  & 100   & \underline{1.000} & 1.002 & 1.003 & 1.004 & \multirow{4}{*}{0.135} \\
   & 1000  & 1.000 & \underline{1.000} & 1.000 & 1.000 & \\
   & 3600  & 1.002 & 1.000 & \underline{1.000} & 1.000 & \\
   & 10000 & 1.001 & 1.000 & 1.000 & \underline{1.000} & \\[4pt]
 \multirow{4}{*}{POD-DeepONet~\cite{Lu2022}}
-  & 100   & \underline{0.082} & 0.748 & 0.865 & 0.877 & \multirow{4}{*}{---} \\
+  & 100   & \underline{0.082} & 0.748 & 0.865 & 0.877 & \multirow{4}{*}{0.005} \\
   & 1000  & 0.667 & \underline{0.129} & 0.671 & 0.812 & \\
   & 3600  & 0.660 & 0.392 & \underline{0.180} & 0.623 & \\
   & 10000 & 0.934 & 0.687 & 0.556 & \underline{0.345} & \\[4pt]
 NeuralPOD-DeepONet~\textit{(ours)}
-  & 1000  & 0.762 & \underline{0.198} & 0.607 & 0.761 & --- \\[4pt]
+  & 1000  & 0.762 & \underline{0.198} & 0.607 & 0.761 & 4.87 \\[4pt]
 \multirow{4}{*}{FNO~\cite{Li2021}}
-  & 100   & \underline{0.013} & 0.262 & 0.368 & 0.437 & \multirow{4}{*}{1.50} \\
+  & 100   & \underline{0.013} & 0.262 & 0.368 & 0.437 & \multirow{4}{*}{0.30} \\
   & 1000  & 0.287 & \underline{0.033} & 0.138 & 0.227 & \\
   & 3600  & 0.381 & 0.150 & \underline{0.039} & 0.128 & \\
   & 10000 & 0.461 & 0.260 & 0.126 & \underline{0.042} & \\[4pt]
 \multirow{4}{*}{CNO~\cite{Raonic2023}}
-  & 100   & \underline{0.014} & 0.047 & 0.055 & 0.058 & \multirow{4}{*}{1.50} \\
+  & 100   & \underline{0.014} & 0.047 & 0.055 & 0.058 & \multirow{4}{*}{0.50} \\
   & 1000  & 0.027 & \underline{0.028} & 0.033 & 0.035 & \\
   & 3600  & 0.030 & 0.029 & \underline{0.033} & 0.035 & \\
   & 10000 & 0.030 & 0.028 & 0.032 & \underline{0.034} & \\
 \midrule
 \multicolumn{7}{l}{\textit{Joint training (all Re)}} \\[2pt]
 POD-DeepONet~\cite{Lu2022}
-  & all & 0.092 & 0.132 & 0.141 & 0.145 & --- \\
+  & all & 0.092 & 0.132 & 0.141 & 0.145 & \textbf{0.005} \\
 FNO~\cite{Li2021}
-  & all & \textbf{0.009} & \textbf{0.019} & \textbf{0.024} & \textbf{0.027} & 0.61 \\
+  & all & \textbf{0.009} & \textbf{0.019} & \textbf{0.024} & \textbf{0.027} & 0.30 \\
 NeuralPOD-DeepONet~\textit{(ours)}
-  & all & \multicolumn{4}{c}{\textit{pend.}} & \textit{pend.} \\
+  & all & \multicolumn{4}{c}{\textit{pend.}} & 4.87 \\
 CNO~\cite{Raonic2023}
-  & all & 0.012 & 0.023 & 0.027 & 0.030 & 0.90 \\
+  & all & 0.020 & 0.035 & 0.040 & 0.043 & 0.50 \\
 TEMPO(POD)~\textit{(ours)}
-  & $M{=}4$ & 0.097 & 0.144 & 0.155 & 0.170 & \textbf{0.05} \\
-TEMPO(NeuralPOD)~\textit{(ours)}
-  & \textit{pend.} & \multicolumn{4}{c}{\textit{pend.}} & \textit{pend.} \\
+  & $M{=}4$ & 0.097 & 0.144 & 0.155 & 0.170 & 0.021 \\
+TEMPO(NeuralPOD)$^\dagger$~\textit{(ours)}
+  & $M{=}4$ & 0.595 & 0.620 & 0.694 & 0.627 & 0.021 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1016,8 +1029,8 @@ that appears across all viscosity values.
 The per-viscosity gating weights
 (Table~\ref{tab:gating}, Appendix~\ref{app:exp}) are nearly uniform across
 $\nu\in\{0.001,0.1,1.0\}$, closely matching the global weights
-$\boldsymbol{\pi}{=}(0.324,\,0.267,\,0.409)$: knowing~$\nu$ alone does not
-predict regime membership.
+$\boldsymbol{\pi}{=}(0.324,\,0.267,\,0.409)$: regime membership correlates
+with initial-condition geometry across all viscosity values.
 Within each regime,~$\nu$ shapes the dynamics: the same initial geometry
 yields a shock at $\nu{=}0.001$ and a smooth wave at $\nu{=}1.0$.
 At inference,~$\nu$ is passed to the branch network as a conditioning input.
@@ -1030,12 +1043,13 @@ When the governing parameter drives qualitative change in solution structure, a 
 TEMPO addresses this by treating regime membership as a latent variable.
 EM discovers $M$ regimes from unlabelled snapshots and fits a dedicated basis to each, without regime supervision.
 Per-parameter specialists achieve low in-distribution error but are unusable across the full parameter range — errors grow by orders of magnitude out-of-distribution.
-TEMPO(POD) trained jointly outperforms the joint POD-DeepONet baseline by 31--50\% on Burgers' and up to $3\times$ on Darcy flow, while discovered regimes span multiple parameter values, confirming that the partition reflects solution geometry and physical structure jointly.
+TEMPO(POD) outperforms the joint POD-DeepONet baseline by 13--50\% on Burgers' and up to $4\times$ on Darcy flow; on Navier-Stokes, TEMPO matches the POD baseline.
+Discovered regimes span multiple parameter values, confirming that the partition reflects solution geometry and physical structure jointly.
 TEMPO(NeuralPOD) demonstrates that the regime discovery framework extends naturally to nonlinear bases; closing the gap with TEMPO(POD) in the joint training setting remains an open direction.
 
 Several directions remain open.
 Conditioning the basis functions on $\kappa$ would allow each mode to encode parameter-dependent structure directly.
-Extending TEMPO to higher-dimensional benchmarks will test whether regime discovery generalizes beyond one-dimensional shock dynamics.
+Extending regime discovery to continuous parameter spaces and three-dimensional problems remains an open direction.
 Convergence guarantees for Generalized EM under nonlinear basis parameterization remain an open theoretical problem.
 
 
@@ -1048,6 +1062,57 @@ Convergence guarantees for Generalized EM under nonlinear basis parameterization
 \newpage
 \appendix
 \section{Appendix}\label{app}
+
+\subsection{Proof of Proposition~\ref{prop:advantage}}\label{app:proof}
+
+\begin{lemma}\label{lem:mean}
+Let $\bar{s}=\tfrac{1}{N}\sum_i s^{(i)}$ be the global mean and
+$\bar{s}_m=\tfrac{1}{N_m}\sum_i\gamma_{im}s^{(i)}$ the regime-$m$ mean,
+with $N_m=\sum_i\gamma_{im}$.
+For any rank-$K$ orthoprojector $P$ and any regime $m$,
+\[
+  \sum_i \gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s}_m)\|_w^2
+  =
+  \sum_i \gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s})\|_w^2
+  - N_m\|(I{-}P)(\bar{s}_m{-}\bar{s})\|_w^2.
+\]
+\end{lemma}
+\begin{proof}
+Let $c_m=\bar{s}_m-\bar{s}$.
+Writing $(I{-}P)(s^{(i)}{-}\bar{s}_m)=(I{-}P)(s^{(i)}{-}\bar{s})-(I{-}P)c_m$
+and expanding $\|a-b\|_w^2=\|a\|_w^2-2\langle a,b\rangle_w+\|b\|_w^2$,
+then summing over $i$ with weights $\gamma_{im}$:
+\begin{align*}
+  \sum_i\gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s}_m)\|_w^2
+  &= \sum_i\gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s})\|_w^2 \\
+  &\quad -\;2\Bigl\langle(I{-}P)\!\sum_i\gamma_{im}(s^{(i)}{-}\bar{s}),\;(I{-}P)c_m\Bigr\rangle_w \\
+  &\quad +\;N_m\|(I{-}P)c_m\|_w^2.
+\end{align*}
+Since $\sum_i\gamma_{im}(s^{(i)}{-}\bar{s})=N_mc_m$, the cross-term equals
+$-2N_m\|(I{-}P)c_m\|_w^2$; together with the quadratic term this gives
+$-N_m\|(I{-}P)c_m\|_w^2 = -N_m\|(I{-}P)(\bar{s}_m{-}\bar{s})\|_w^2$.
+\end{proof}
+
+\begin{proof}[Proof of Proposition~\ref{prop:advantage}]
+Let $P^*$ and $P_m^*$ be the globally and regime-$m$ optimal rank-$K$ projectors.
+Since $P_m^*$ minimizes the regime-$m$ objective over all rank-$K$ projectors,
+substituting the (generally suboptimal) $P^*$ cannot decrease it:
+\[
+  \varepsilon_{\mathrm{TEMPO}}^K
+  = \sum_m\sum_i\gamma_{im}\|(I{-}P_m^*)(s^{(i)}{-}\bar{s}_m)\|_w^2
+  \;\leq\;
+  \sum_m\sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s}_m)\|_w^2.
+\]
+Applying Lemma~\ref{lem:mean} to each $m$ and summing over $m$,
+then using $\sum_m\gamma_{im}=1$ for each $i$:
+\begin{align*}
+  \sum_m\sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s}_m)\|_w^2
+  &= \sum_i\|(I{-}P^*)(s^{(i)}{-}\bar{s})\|_w^2
+    - \underbrace{\sum_m N_m\|(I{-}P^*)(\bar{s}_m{-}\bar{s})\|_w^2}_{\geq\,0}\\
+  &\leq \sum_i\|(I{-}P^*)(s^{(i)}{-}\bar{s})\|_w^2
+    = \varepsilon_{\mathrm{global}}^K.
+\end{align*}
+\end{proof}
 
 \subsection{2D Navier-Stokes Data Generation}\label{app:ns_data}
 
@@ -1072,8 +1137,7 @@ behavior before recording begins.
 Table~\ref{tab:regime_selection} reports BIC, mean assignment entropy~$H$,
 and mean test error~$\bar{\varepsilon}$ for $M\in\{2,3,4\}$.
 Table~\ref{tab:gating} shows the per-viscosity EM responsibilities alongside
-global mixture weights~$\pi_m$; near-uniform agreement across $\nu$ confirms
-geometry-driven rather than parameter-driven regime membership.
+global mixture weights~$\pi_m$.
 
 \begin{table}[h]
 \centering
@@ -1105,8 +1169,7 @@ $M$ & BIC (${\times}10^{4}$, $\downarrow$) & $H$ & $\bar{\varepsilon}$ \\
 \setlength{\tabcolsep}{14pt}
 \caption{Mean EM assignment weights per viscosity (1D Burgers',
   TEMPO(POD), $M{=}3$) vs.\ global mixture weights~$\pi_m$.
-  Each row sums to~$1$; near-uniform agreement across $\nu$ confirms
-  regime membership is driven by~$u_0$ geometry, not by~$\nu$.}
+  Each row sums to~$1$.}
 \label{tab:gating}
 \begin{tabular}{c c c c}
 \toprule
@@ -1279,23 +1342,22 @@ assignments, reflecting the higher expressivity of the NeuralPOD basis.
 \label{fig:umap_em_npod}
 \end{figure}
 
-\paragraph{TEMPO regime structure (2D Darcy flow, $M{=}4$).}
+\paragraph{TEMPO regime structure (2D Darcy flow).}
 Figures~\ref{fig:tempo_phase1_darcy}--\ref{fig:tempo_phase1_darcy_npod} show
-the TEMPO Phase~1 regime structure on 2D Darcy flow ($M{=}4$) for POD and
-NeuralPOD bases. Regimes span multiple $\beta$ values, confirming
-geometry-driven rather than parameter-driven partition.
+the TEMPO Phase~1 regime structure on 2D Darcy flow for POD and
+NeuralPOD bases ($M{=}4$ shown for interpretability). Regimes span multiple $\beta$ values.
 
 \begin{figure}[!htbp]
 \centering
 \includegraphics[width=\textwidth]{figs/TEMPO_phase1_darcy_pod_M4.png}
-\caption{TEMPO(POD) on 2D Darcy flow ($M{=}4$, $H{=}0.75$, $\boldsymbol{\pi}{=}(0.22,\,0.28,\,0.28,\,0.22)$). Layout as in Figure~\ref{fig:umap_em}.}
+\caption{TEMPO(POD) on 2D Darcy flow ($M{=}4$, shown for interpretability; quantitative results in Table~\ref{tab:darcy} use $M{=}5$). Layout as in Figure~\ref{fig:umap_em}.}
 \label{fig:tempo_phase1_darcy}
 \end{figure}
 
 \begin{figure}[!htbp]
 \centering
 \includegraphics[width=\textwidth]{figs/TEMPO_phase1_darcy_npod_M4.png}
-\caption{TEMPO(NeuralPOD) on 2D Darcy flow ($M{=}4$, $H{=}0.68$). Layout as in Figure~\ref{fig:umap_em}.}
+\caption{TEMPO(NeuralPOD) on 2D Darcy flow ($M{=}4$, shown for interpretability; quantitative results in Table~\ref{tab:darcy} use $M{=}5$). Layout as in Figure~\ref{fig:umap_em}.}
 \label{fig:tempo_phase1_darcy_npod}
 \end{figure}
 
@@ -1319,70 +1381,15 @@ show representative predictions from the two TEMPO variants on 2D Darcy flow.
 \label{fig:tempo_npod_darcy_rec}
 \end{figure}
 
-\subsection{Proof of Proposition~\ref{prop:advantage}}\label{app:proof}
-
-\begin{lemma}\label{lem:mean}
-For any rank-$K$ orthoprojector $P$ and any regime $m$,
-\[
-  \sum_i \gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s}_m)\|_w^2
-  =
-  \sum_i \gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s})\|_w^2
-  - N_m\|(I{-}P)(\bar{s}_m{-}\bar{s})\|_w^2.
-\]
-\end{lemma}
-\begin{proof}
-Let $c_m=\bar{s}_m-\bar{s}$.
-Writing $(I{-}P)(s^{(i)}{-}\bar{s}_m)=(I{-}P)(s^{(i)}{-}\bar{s})-(I{-}P)c_m$
-and expanding $\|a-b\|_w^2=\|a\|_w^2-2\langle a,b\rangle_w+\|b\|_w^2$,
-then summing over $i$ with weights $\gamma_{im}$:
-\begin{align*}
-  \sum_i\gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s}_m)\|_w^2
-  &= \sum_i\gamma_{im}\|(I{-}P)(s^{(i)}{-}\bar{s})\|_w^2 \\
-  &\quad -\;2\Bigl\langle(I{-}P)\!\sum_i\gamma_{im}(s^{(i)}{-}\bar{s}),\;(I{-}P)c_m\Bigr\rangle_w \\
-  &\quad +\;N_m\|(I{-}P)c_m\|_w^2.
-\end{align*}
-Since $\sum_i\gamma_{im}(s^{(i)}{-}\bar{s})=N_mc_m$,
-the cross-term (second line) equals $-2N_m\|(I{-}P)c_m\|_w^2$.
-Adding the quadratic term (third line) gives $-N_m\|(I{-}P)c_m\|_w^2$,
-which is the right-hand side of the identity.
-\end{proof}
-
-\begin{proof}[Proof of Proposition~\ref{prop:advantage}]
-Let $P^*,\bar{s}$ be the globally optimal rank-$K$ projector and mean,
-and $P_m^*,\bar{s}_m$ their regime-$m$ counterparts.
-Since $P_m^*$ minimizes the regime-$m$ objective over all rank-$K$ projectors,
-substituting the (generally suboptimal) $P^*$ cannot decrease it:
-\[
-  \varepsilon_{\mathrm{TEMPO}}^K
-  = \sum_m\sum_i\gamma_{im}\|(I{-}P_m^*)(s^{(i)}{-}\bar{s}_m)\|_w^2
-  \;\leq\;
-  \sum_m\sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s}_m)\|_w^2.
-\]
-By Lemma~\ref{lem:mean}, the inner sum for each $m$ satisfies
-\[
-  \sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s}_m)\|_w^2
-  = \sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s})\|_w^2
-  - N_m\|(I{-}P^*)(\bar{s}_m{-}\bar{s})\|_w^2.
-\]
-Summing this over $m$ and using $\sum_m\gamma_{im}=1$ for each $i$:
-\begin{align*}
-  \sum_m\sum_i\gamma_{im}\|(I{-}P^*)(s^{(i)}{-}\bar{s}_m)\|_w^2
-  &= \sum_i\|(I{-}P^*)(s^{(i)}{-}\bar{s})\|_w^2
-    - \underbrace{\sum_m N_m\|(I{-}P^*)(\bar{s}_m{-}\bar{s})\|_w^2}_{\geq\,0}\\
-  &\leq \sum_i\|(I{-}P^*)(s^{(i)}{-}\bar{s})\|_w^2
-    = \varepsilon_{\mathrm{global}}^K. \qquad\square
-\end{align*}
-\end{proof}
-
 \clearpage
 \subsection{Algorithms}\label{app:alg}
 
 \begin{algorithm}[H]
-\caption{\textsc{WeightedNeuralPOD}$\bigl(
-  \{s^{(i)}, \gamma_{im}\}_{i=1}^N,\;
-  \tau\bigr)$}
+\caption{\textsc{NeuralBasis}}
 \label{alg:npod}
 \begin{algorithmic}[1]
+\Require weighted snapshots $\{s^{(i)},\,\gamma_{im}\}_{i=1}^N$, tolerance $\tau$
+\Ensure basis $\phi_0^{(m)},\;\bigl\{\phi_k^{(m)},\,\{\lambda_k^{(m,i)}\}_{i=1}^N\bigr\}_{k=1}^{K_m}$
 \State $\bar{s}^{(m)} \leftarrow \displaystyle\frac{1}{N_m}\sum_{i=1}^N \gamma_{im}\,s^{(i)},\quad N_m = \sum_{i=1}^N\gamma_{im}$
   \hfill\Comment{responsibility-weighted mean trajectory}
 \State Train $\phi_0^{(m)}$ by minimizing
@@ -1412,7 +1419,7 @@ Summing this over $m$ and using $\sum_m\gamma_{im}=1$ for each $i$:
 \end{algorithm}
 
 \begin{algorithm}[H]
-\caption{TEMPO --- Offline Phase}
+\caption{\textsc{TEMPO}}
 \label{alg:tempo}
 \begin{algorithmic}[1]
 \Require $\mathcal{D} = \{u_0^{(i)}, \kappa^{(i)}, s^{(i)}\}_{i=1}^N$;\;
@@ -1429,7 +1436,7 @@ Summing this over $m$ and using $\sum_m\gamma_{im}=1$ for each $i$:
   $\gamma_{im}^{(0)},\;\pi_m^{(0)},\;\mu_m^{(0)},\;\Sigma_m^{(0)}$
 \For{$m = 1,\ldots,M$}
   \State $\Phi_m^{(0)},\,\Lambda_m^{(0)} \leftarrow$
-    \Call{WeightedNeuralPOD}
+    \Call{NeuralBasis}
     {$\{s^{(i)},\gamma_{im}^{(0)}\},\,\tau$}
     \hfill\Comment{or weighted SVD for TEMPO(POD), see \S\ref{sec:bases}}
 \EndFor
@@ -1470,7 +1477,7 @@ Summing this over $m$ and using $\sum_m\gamma_{im}=1$ for each $i$:
     \Else
       \hfill \textsc{Full rerun}
       \State $\Phi_m^{(q)},\,\Lambda_m^{(q)} \leftarrow$
-        \Call{WeightedNeuralPOD}
+        \Call{NeuralBasis}
         {$\{s^{(i)},\gamma_{im}^{(q)}\},\,\tau$}
     \EndIf
   \EndFor
