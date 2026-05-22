@@ -1,0 +1,86 @@
+{
+  "burgers/pod_deeponet": {
+    "inference_ms_per_call": 1.0478799231350422,
+    "inference_ms_per_sample": 0.0040932809497462586
+  },
+  "burgers/npod_deeponet": {
+    "inference_ms_per_call": 226.0668981820345,
+    "inference_ms_per_sample": 3.532295284094289
+  },
+  "burgers/fno": {
+    "inference_ms_per_call": 316.650518681854,
+    "inference_ms_per_sample": 9.895328708807938
+  },
+  "burgers/tempo_pod": {
+    "inference_ms_per_call": 2.335863560438156,
+    "inference_ms_per_sample": 0.03649786813184619
+  },
+  "burgers/tempo_npod": {
+    "inference_ms_per_call": 2.3125464096665382,
+    "inference_ms_per_sample": 0.03613353765103966
+  },
+  "darcy/pod_deeponet": {
+    "inference_ms_per_call": 0.5973047576844692,
+    "inference_ms_per_sample": 0.0005973047576844692
+  },
+  "darcy/fno": {
+    "inference_ms_per_call": 590.9415981732309,
+    "inference_ms_per_sample": 0.5909415981732309
+  },
+  "darcy/tempo_pod": {
+    "inference_ms_per_call": 1.6613400541245937,
+    "inference_ms_per_sample": 0.006489609586424194
+  },
+  "darcy/tempo_npod": {
+    "inference_ms_per_call": 1.6674177721142769,
+    "inference_ms_per_sample": 0.006513350672321394
+  },
+  "ns/fno": {
+    "inference_ms_per_call": 151.15732867270708,
+    "inference_ms_per_sample": 0.3023146573454142
+  },
+  "burgers/cno": {
+    "inference_ms_per_call": 1069.319714885205,
+    "inference_ms_per_sample": 2.13863942977041
+  },
+  "darcy/npod_deeponet": {
+    "inference_ms_per_call": 33.53582639247179,
+    "inference_ms_per_sample": 0.16767913196235895
+  },
+  "darcy/cno": {
+    "inference_ms_per_call": 2236.8620571680367,
+    "inference_ms_per_sample": 2.236862057168037
+  },
+  "ns/cno": {
+    "inference_ms_per_call": 249.54822324216366,
+    "inference_ms_per_sample": 0.4990964464843273
+  },
+  "ns/pod_deeponet": {
+    "inference_ms_per_call": 1.2793231755495071,
+    "inference_ms_per_sample": 0.004997356154490262
+  },
+  "ns/npod_deeponet": {
+    "inference_ms_per_call": 311.65553694590926,
+    "inference_ms_per_sample": 4.869617764779832
+  },
+  "burgers/deeponet": {
+    "inference_ms_per_call": 2.3458494804799557,
+    "inference_ms_per_sample": 0.03665389813249931
+  },
+  "darcy/deeponet": {
+    "inference_ms_per_call": 1.6093620099127293,
+    "inference_ms_per_sample": 0.025146281404886395
+  },
+  "ns/deeponet": {
+    "inference_ms_per_call": 8.669810183346272,
+    "inference_ms_per_sample": 0.1354657841147855
+  },
+  "ns/tempo_pod": {
+    "inference_ms_per_call": 5.289069190621376,
+    "inference_ms_per_sample": 0.02066042652586475
+  },
+  "ns/tempo_npod": {
+    "inference_ms_per_call": 5.285971891134977,
+    "inference_ms_per_sample": 0.020648327699746005
+  }
+}

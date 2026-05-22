@@ -1146,6 +1146,7 @@ random sums of sinusoids,
 A $5\,\mathrm{s}$ burn-in (500 simulation steps) discards transient
 behavior before recording begins.
 
+\clearpage
 \subsection{Additional Experiments}\label{app:exp}
 
 \paragraph{Regime model selection (1D Burgers').}
@@ -1221,31 +1222,35 @@ $\kappa$ predicted from $u_0$ & \textemdash & $+0.024$ ($+7\%$) & \multicolumn{2
 \end{tabular}
 \end{table}
 
-\paragraph{POD basis quality (1D Burgers').}
-Figure~\ref{fig:pod_phase1} shows the singular value spectrum and cumulative
-explained variance for the global POD on 1D Burgers'.
-$K{=}30$ modes capture $99.99\%$ of the total variance, achieving a
-Phase~1 relative $L^2$ reconstruction error of $1.47\%$.
+\paragraph{POD vs.\ NeuralPOD basis comparison (1D Burgers').}
+Figure~\ref{fig:basis_spectrum} shows the singular-value and residual decay for POD ($K{=}30$ modes capture $99.99\%$ of the variance) and Fourier NeuralPOD.
+The corresponding spatiotemporal mode functions (Figure~\ref{fig:basis_modes_collage}) reveal a structural difference: POD modes are globally supported, while NeuralPOD modes localise adaptively — at $\nu{=}0.01$ they concentrate near the shock front.
+Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis_reconstruction}; additional NeuralPOD examples are shown in Figure~\ref{fig:basis_rec}.
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_phase1.png}
-\caption{Global POD basis on 1D Burgers' ($\nu{=}1.0$): singular value spectrum (\textit{left}) and cumulative explained variance (\textit{right}).}
-\label{fig:pod_phase1}
+\includegraphics[width=\textwidth]{TEMPO/main/figs/basis_spectrum_nu1.0.png}
+\caption{Basis convergence on 1D Burgers' ($\nu{=}1.0$): POD singular-value decay (\textit{left}); Fourier NeuralPOD residual decay (\textit{right}).}
+\label{fig:basis_spectrum}
 \end{figure}
 
-\paragraph{NeuralPOD basis quality (1D Burgers').}
-Figure~\ref{fig:npod_phase1} shows the greedy residual norm as a function of
-mode count; the steep initial decay confirms that the Fourier NeuralPOD basis
-concentrates variance efficiently.
-Figure~\ref{fig:basis_rec} shows representative Phase~1 reconstructions from the Fourier NeuralPOD basis.
-
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.85\textwidth]{TEMPO/main/pictures/npod_phase1.png}
-\caption{Fourier NeuralPOD basis on 1D Burgers' ($\nu{=}1.0$):
-  weighted residual norm versus greedy mode count.}
-\label{fig:npod_phase1}
+\begin{subfigure}{\textwidth}
+  \centering
+  \includegraphics[width=0.9\textwidth]{TEMPO/main/figs/basis_modes_nu1.0.png}
+  \caption{$\nu{=}1.0$}
+  \label{fig:basis_modes}
+\end{subfigure}
+\\[0.5ex]
+\begin{subfigure}{\textwidth}
+  \centering
+  \includegraphics[width=0.9\textwidth]{TEMPO/main/figs/basis_modes_nu0.01.png}
+  \caption{$\nu{=}0.01$}
+  \label{fig:basis_modes_nu001}
+\end{subfigure}
+\caption{First $K$ basis modes on 1D Burgers': POD (\textit{top row}) vs.\ Fourier NeuralPOD (\textit{bottom row}).}
+\label{fig:basis_modes_collage}
 \end{figure}
 
 \begin{figure}[!htbp]
@@ -1255,41 +1260,6 @@ Figure~\ref{fig:basis_rec} shows representative Phase~1 reconstructions from the
 \label{fig:basis_rec}
 \end{figure}
 
-\paragraph{POD vs.\ NeuralPOD basis comparison (1D Burgers', $\nu{=}1.0$).}
-Figure~\ref{fig:basis_spectrum} shows the singular-value decay of the global POD
-basis alongside the weighted residual decay of the Fourier NeuralPOD basis.
-Figure~\ref{fig:basis_modes} shows the first $K$ spatiotemporal mode functions
-for both bases; POD modes are globally supported, while NeuralPOD modes
-adapt their spatial localisation to the data.
-Figure~\ref{fig:basis_modes_nu001} shows the same comparison for $\nu{=}0.01$:
-NeuralPOD modes concentrate near the shock front while POD modes remain globally supported.
-Figure~\ref{fig:basis_reconstruction} compares per-sample reconstructions from
-both bases: ground truth, POD prediction, POD error, Fourier NeuralPOD prediction,
-and Fourier NeuralPOD error.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/basis_spectrum_nu1.0.png}
-\caption{POD singular-value decay (\textit{left}) and Fourier NeuralPOD
-  residual decay (\textit{right}) on 1D Burgers' ($\nu{=}1.0$).}
-\label{fig:basis_spectrum}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/basis_modes_nu1.0.png}
-\caption{First $K$ basis modes on 1D Burgers' ($\nu{=}1.0$):
-  POD (\textit{top}) vs.\ Fourier NeuralPOD (\textit{bottom}).}
-\label{fig:basis_modes}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/basis_modes_nu0.01.png}
-\caption{First $K$ basis modes on 1D Burgers' ($\nu{=}0.01$):
-  POD (\textit{top}) vs.\ Fourier NeuralPOD (\textit{bottom}).}
-\label{fig:basis_modes_nu001}
-\end{figure}
 
 \begin{figure}[!htbp]
 \centering
@@ -1300,142 +1270,124 @@ and Fourier NeuralPOD error.
 \label{fig:basis_reconstruction}
 \end{figure}
 
-\paragraph{Error distributions.}
-Figures~\ref{fig:pod_err_dist} and~\ref{fig:npod_err_dist} show the full
-test-set error distributions for POD-DeepONet and NeuralPOD-DeepONet on
-1D Burgers' ($\nu{=}1.0$).
+
+\paragraph{Representative reconstructions (1D Burgers').}
+Figure~\ref{fig:burgers_rec_collage} shows space--time predictions for all four methods on 1D Burgers' ($\nu{=}1.0$). Each panel: ground truth (\textit{left}), prediction (\textit{center}), point-wise error (\textit{right}).
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.8\textwidth]{TEMPO/main/pictures/pod_err_dist.png}
-\caption{POD-DeepONet test-set error distribution on 1D Burgers' ($\nu{=}1.0$):
-  error histogram (\textit{left}) and sorted errors (\textit{right}).}
-\label{fig:pod_err_dist}
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_reconstruction.png}
+  \caption{POD-DeepONet}
+  \label{fig:pod_reconstruction}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_reconstruction.png}
+  \caption{NeuralPOD-DeepONet}
+  \label{fig:npod_reconstruction}
+\end{subfigure}
+\\[1ex]
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_burgers_reconstruct.png}
+  \caption{TEMPO(POD), $M{=}3$}
+  \label{fig:tempo_pod_burgers_rec}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_npod_burgers_reconstruct.png}
+  \caption{TEMPO(NeuralPOD), $M{=}3$: high-frequency noise (L2 $0.46$--$0.54$)}
+  \label{fig:tempo_npod_burgers_rec}
+\end{subfigure}
+\caption{Space--time reconstructions on 1D Burgers' ($\nu{=}1.0$).}
+\label{fig:burgers_rec_collage}
 \end{figure}
 
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.8\textwidth]{TEMPO/main/pictures/npod_err_dist.png}
-\caption{NeuralPOD-DeepONet test-set error distribution on 1D Burgers'
-  ($\nu{=}1.0$). Layout as in Figure~\ref{fig:pod_err_dist}.}
-\label{fig:npod_err_dist}
-\end{figure}
-
-\paragraph{Representative reconstructions.}
-Figures~\ref{fig:pod_reconstruction} and~\ref{fig:npod_reconstruction} show
-representative space--time predictions for POD-DeepONet and
-NeuralPOD-DeepONet on 1D Burgers' ($\nu{=}1.0$).
+\paragraph{TEMPO regime structure across benchmarks.}
+Figure~\ref{fig:umap_all} compares the Phase~1 regime structure across all three benchmarks.
+On Burgers' (NeuralPOD), the partition mirrors the POD variant (Figure~\ref{fig:umap_em}) with sharper assignments.
+On Darcy flow, regimes span multiple $\beta$ values; TEMPO(NeuralPOD) finds a nearly identical partition.
+On Navier-Stokes, all Re values overlap in POD coefficient space and regimes 2--4 collapse to a few points, explaining why dedicated bases bring no gain.
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_reconstruction.png}
-\caption{POD-DeepONet: representative reconstructions on 1D Burgers'
-  ($\nu{=}1.0$). Each row: ground truth (\textit{left}), prediction
-  (\textit{center}), point-wise absolute error (\textit{right}).}
-\label{fig:pod_reconstruction}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_reconstruction.png}
-\caption{NeuralPOD-DeepONet: representative reconstructions on 1D Burgers'
-  ($\nu{=}1.0$). Layout as in Figure~\ref{fig:pod_reconstruction}.}
-\label{fig:npod_reconstruction}
-\end{figure}
-
-\paragraph{TEMPO regime structure (1D Burgers', NeuralPOD basis).}
-Figure~\ref{fig:umap_em_npod} shows the TEMPO(NeuralPOD) regime structure on
-1D Burgers' ($M{=}3$). The partition mirrors TEMPO(POD) but with sharper
-assignments, reflecting the higher expressivity of the NeuralPOD basis.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{figs/TEMPO_phase1_burgers_npod_M3.png}
-\caption{TEMPO(NeuralPOD) on 1D Burgers' ($M{=}3$, $H{=}0.23$, cf.\ $H{=}0.84$ for POD). Layout as in Figure~\ref{fig:umap_em}.}
-\label{fig:umap_em_npod}
-\end{figure}
-
-\paragraph{TEMPO reconstructions (1D Burgers').}
-Figures~\ref{fig:tempo_pod_burgers_rec}--\ref{fig:tempo_npod_burgers_rec}
-show representative space--time predictions from the two TEMPO variants on 1D Burgers'.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_burgers_reconstruct.png}
-\caption{TEMPO(POD) on 1D Burgers' ($M{=}3$): ground truth (\textit{left}),
-  prediction (\textit{center}), point-wise absolute error (\textit{right}).}
-\label{fig:tempo_pod_burgers_rec}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_npod_burgers_reconstruct.png}
-\caption{TEMPO(NeuralPOD) on 1D Burgers' ($M{=}3$): predictions exhibit high-frequency noise (L2 $0.46$--$0.54$); layout as in Figure~\ref{fig:tempo_pod_burgers_rec}.}
-\label{fig:tempo_npod_burgers_rec}
-\end{figure}
-
-\paragraph{TEMPO regime structure (2D Darcy flow).}
-Figure~\ref{fig:tempo_phase1_darcy} shows the TEMPO(POD) Phase~1 regime structure on 2D Darcy flow ($M{=}4$ shown for interpretability). Regimes span multiple $\beta$ values. TEMPO(NeuralPOD) discovers a nearly identical partition.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{figs/TEMPO_phase1_darcy_pod_M4.png}
-\caption{TEMPO(POD) on 2D Darcy flow ($M{=}4$, shown for interpretability; quantitative results in Table~\ref{tab:darcy} use $M{=}5$). Layout as in Figure~\ref{fig:umap_em}.}
-\label{fig:tempo_phase1_darcy}
+\begin{subfigure}{\textwidth}
+  \centering
+  \includegraphics[width=0.85\textwidth]{figs/TEMPO_phase1_burgers_npod_M3.png}
+  \caption{1D Burgers', NeuralPOD ($M{=}3$, $H{=}0.23$)}
+  \label{fig:umap_em_npod}
+\end{subfigure}
+\\[0.5ex]
+\begin{subfigure}{\textwidth}
+  \centering
+  \includegraphics[width=0.85\textwidth]{figs/TEMPO_phase1_darcy_pod_M4.png}
+  \caption{2D Darcy flow, POD ($M{=}4$)}
+  \label{fig:tempo_phase1_darcy}
+\end{subfigure}
+\\[0.5ex]
+\begin{subfigure}{\textwidth}
+  \centering
+  \includegraphics[width=0.85\textwidth]{figs/ns_tempo_phase1.png}
+  \caption{2D Navier-Stokes, POD ($M{=}4$): no Re separation}
+  \label{fig:ns_tempo_phase1}
+\end{subfigure}
+\caption{TEMPO EM regime structure across all benchmarks. Layout as in Figure~\ref{fig:umap_em}.}
+\label{fig:umap_all}
 \end{figure}
 
 \paragraph{TEMPO reconstructions (2D Darcy flow).}
-Figures~\ref{fig:tempo_pod_darcy_rec}--\ref{fig:tempo_npod_darcy_rec}
-show representative predictions from the two TEMPO variants on 2D Darcy flow.
+Figure~\ref{fig:darcy_rec_collage} shows representative predictions from both TEMPO variants on 2D Darcy flow ($M{=}5$). Each panel: ground truth (\textit{left}), prediction (\textit{center}), point-wise error (\textit{right}).
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_darcy_reconstruct.png}
-\caption{TEMPO(POD) on 2D Darcy flow ($M{=}5$): ground truth (\textit{left}),
-  prediction (\textit{center}), point-wise absolute error (\textit{right}).}
-\label{fig:tempo_pod_darcy_rec}
+\begin{subfigure}[t]{0.44\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_darcy_reconstruct.png}
+  \caption{TEMPO(POD)}
+  \label{fig:tempo_pod_darcy_rec}
+\end{subfigure}
+\hspace{0.04\textwidth}
+\begin{subfigure}[t]{0.44\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_npod_darcy_reconstruct.png}
+  \caption{TEMPO(NeuralPOD)}
+  \label{fig:tempo_npod_darcy_rec}
+\end{subfigure}
+\caption{Space--time reconstructions on 2D Darcy flow ($M{=}5$).}
+\label{fig:darcy_rec_collage}
 \end{figure}
 
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_npod_darcy_reconstruct.png}
-\caption{TEMPO(NeuralPOD) on 2D Darcy flow ($M{=}5$). Layout as in
-  Figure~\ref{fig:tempo_pod_darcy_rec}.}
-\label{fig:tempo_npod_darcy_rec}
-\end{figure}
-
-\paragraph{TEMPO regime discovery and training dynamics (2D Navier-Stokes).}
-Figures~\ref{fig:ns_em_convergence} and~\ref{fig:ns_training_dynamics} show the EM convergence and online training dynamics for TEMPO(POD) on 2D Navier-Stokes ($M{=}4$).
+\paragraph{TEMPO regime discovery \& reconstructions (2D Navier-Stokes).}
+Figure~\ref{fig:ns_rec_collage} shows the EM convergence and representative predictions from TEMPO(POD) on 2D Navier-Stokes ($M{=}4$).
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{figs/ns_em_convergence.png}
-\caption{TEMPO(POD) EM convergence on 2D Navier-Stokes ($M{=}4$).}
-\label{fig:ns_em_convergence}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{figs/ns_training_dynamics.png}
-\caption{Online training dynamics for TEMPO(POD) on 2D Navier-Stokes ($M{=}4$).}
-\label{fig:ns_training_dynamics}
-\end{figure}
-
-\paragraph{TEMPO reconstructions (2D Navier-Stokes).}
-Figures~\ref{fig:ns_reconstruction} and~\ref{fig:ns_reconstruction_3d} show representative predictions from TEMPO(POD) on 2D Navier-Stokes.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\textwidth]{figs/ns_reconstruction_sample0.png}
-\caption{TEMPO(POD) on 2D Navier-Stokes ($M{=}4$): ground truth (\textit{left}), prediction (\textit{center}), point-wise absolute error (\textit{right}).}
-\label{fig:ns_reconstruction}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.75\textwidth]{figs/ns_reconstruction_3d_sample0.png}
-\caption{TEMPO(POD) on 2D Navier-Stokes ($M{=}4$): 3D vorticity field visualization.}
-\label{fig:ns_reconstruction_3d}
+\begin{subfigure}{\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figs/ns_em_convergence.png}
+  \caption{EM convergence.}
+  \label{fig:ns_em_convergence}
+\end{subfigure}
+\\[1ex]
+\begin{subfigure}{\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figs/ns_reconstruction_sample0.png}
+  \caption{Ground truth (\textit{left}), prediction (\textit{center}), point-wise absolute error (\textit{right}).}
+  \label{fig:ns_reconstruction}
+\end{subfigure}
+\\[0.5ex]
+\begin{subfigure}{\textwidth}
+  \centering
+  \includegraphics[width=0.75\textwidth]{figs/ns_reconstruction_3d_sample0.png}
+  \caption{3D vorticity field visualization.}
+  \label{fig:ns_reconstruction_3d}
+\end{subfigure}
+\caption{TEMPO(POD) on 2D Navier-Stokes ($M{=}4$): EM convergence (\textit{top}); representative predictions (\textit{middle}, \textit{bottom}).}
+\label{fig:ns_rec_collage}
 \end{figure}
 
 \clearpage

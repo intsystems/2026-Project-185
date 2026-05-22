@@ -55,6 +55,8 @@ def parse_args():
     p.add_argument("--eps_skip",      type=float, default=1e-10)
     p.add_argument("--eps_large",     type=float, default=0.1)
     p.add_argument("--eps_conv",      type=float, default=0.0)
+    p.add_argument("--kappa_init",    action=argparse.BooleanOptionalAction, default=True,
+                   help="Init regimes from log(kappa) spacing instead of GMM on alpha")
     p.add_argument("--heteroscedastic", action="store_true", default=True,
                    help="Use relative error in EM E-step (robust for multi-scale data)")
 
@@ -191,6 +193,7 @@ def main():
         eps_large=args.eps_large,
         eps_conv=args.eps_conv,
         heteroscedastic=args.heteroscedastic,
+        kappa_init=args.kappa_init,
         basis_config=basis_cfg,
         basis_factory=basis_factory,
     )
@@ -511,6 +514,16 @@ def main():
 
     with open(os.path.join(RUN_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
+
+    torch.save({
+        "model_online": model_online.state_dict(),
+        "cfg":          cfg,
+        "cfg_online":   cfg_online,
+        "metrics":      metrics,
+        "run_name":     RUN_NAME,
+    }, os.path.join(RUN_DIR, "model_online.pt"))
+
+    torch.save(trainer, os.path.join(RUN_DIR, "trainer.pt"))
 
     print(f"Results saved to {RUN_DIR}")
 

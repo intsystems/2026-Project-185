@@ -195,3 +195,13 @@ slurm
 paper/Formatting_Instructions_For_NeurIPS_2026
 code/paper
 CNO
+
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+test_models
+ABL_TEST
+*.pid

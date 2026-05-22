@@ -150,16 +150,16 @@ def plot_modes(trainer_pod, trainer_fnpod, x_flat, device, Nt, Nx, n_modes_viz, 
         phi_pod   = pod_modes[:, k].reshape(Nt, Nx)
         phi_fnpod = fnpod_modes[k].reshape(Nt, Nx)
 
-        for row, phi, label in [(0, phi_pod, "POD"), (1, phi_fnpod, "FNPOD")]:
+        for row, phi, label, color in [(0, phi_pod, "POD", C0), (1, phi_fnpod, "FNPOD", C1)]:
             ax  = axes[row, k]
             vmax = np.abs(phi).max()
-            ax.imshow(phi, aspect="auto", origin="lower", cmap="RdBu_r",
+            ax.imshow(phi, aspect="auto", origin="lower", cmap="RdBu",
                       vmin=-vmax, vmax=vmax)
             ax.set_xticks([]); ax.set_yticks([])
             if row == 0:
                 ax.set_title(f"$\\phi_{{{k+1}}}$", fontsize=9)
             if k == 0:
-                ax.set_ylabel(label, fontsize=9)
+                ax.set_ylabel(label, fontsize=9, color=color, fontweight="bold")
 
     fig.text(0.5, -0.01, "space  →", ha="center", fontsize=8)
     fig.text(-0.01, 0.5, "← time", va="center", rotation="vertical", fontsize=8)
