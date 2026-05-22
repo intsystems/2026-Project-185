@@ -362,7 +362,7 @@ def main():
             metrics[f"re{re:.0f}_mean"] = m_err
             metrics[f"re{re:.0f}_median"] = med_err
             metrics[f"re{re:.0f}_std"] = float(err_test[mask].std())
-            cross_re_metrics[re] = {
+            cross_re_metrics[int(re)] = {
                 "mean": m_err,
                 "median": med_err,
                 "std": float(err_test[mask].std()),
