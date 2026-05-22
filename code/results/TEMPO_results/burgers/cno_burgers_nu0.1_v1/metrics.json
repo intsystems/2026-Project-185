@@ -1,39 +1,39 @@
 {
   "run_name": "cno_burgers_nu0.1_v1",
-  "n_params": 134245,
-  "n_train": 400,
-  "n_test": 100,
-  "train_mean": 0.5299886465072632,
-  "train_median": 0.41584423184394836,
-  "train_std": 0.38058197498321533,
-  "test_mean": 0.5409894585609436,
-  "test_median": 0.4196568727493286,
-  "test_std": 0.3634223937988281,
-  "test_p95": 1.1161832809448242,
+  "n_params": 2007209,
+  "n_train": 8500,
+  "n_test": 1000,
+  "train_mean": 0.1531464010477066,
+  "train_median": 0.08709017932415009,
+  "train_std": 0.3737108111381531,
+  "test_mean": 0.1991397887468338,
+  "test_median": 0.1056748628616333,
+  "test_std": 0.255842387676239,
+  "test_p95": 0.661567211151123,
   "cross_nu": {
     "0.001": {
-      "mean": 1.2993122339248657,
-      "median": 0.8971588015556335,
-      "std": 1.4695322513580322,
-      "p95": 3.8311686515808105
+      "mean": 0.9829610586166382,
+      "median": 0.7589808702468872,
+      "std": 2.7707252502441406,
+      "p95": 1.9305694103240967
     },
     "0.01": {
-      "mean": 0.7692901492118835,
-      "median": 0.6110968589782715,
-      "std": 0.5578272938728333,
-      "p95": 1.6758301258087158
+      "mean": 0.8271616101264954,
+      "median": 0.696641206741333,
+      "std": 0.8288508057594299,
+      "p95": 1.727339267730713
     },
     "0.1": {
-      "mean": 0.5409894585609436,
-      "median": 0.4196568727493286,
-      "std": 0.3634223937988281,
-      "p95": 1.1161832809448242
+      "mean": 0.1991397887468338,
+      "median": 0.1056748628616333,
+      "std": 0.255842387676239,
+      "p95": 0.661567211151123
     },
     "1.0": {
-      "mean": 1.024937391281128,
-      "median": 0.4459472596645355,
-      "std": 2.291449546813965,
-      "p95": 2.42891001701355
+      "mean": 0.4707130193710327,
+      "median": 0.2577383518218994,
+      "std": 0.5337535738945007,
+      "p95": 1.344445824623108
     }
   },
   "hparams": {
@@ -41,19 +41,19 @@
       0.1
     ],
     "run_name": null,
-    "results_dir": "/Users/rknza/research/m1p/project/code/TEMPO_results/burgers",
-    "n_samples": 500,
-    "n_test_per_nu": 100,
-    "data_dir": "/Users/rknza/data/1D/Burgers/Train",
+    "results_dir": "/home/a.bulkin/TEMPO/code/TEMPO_results/burgers",
+    "n_samples": 9500,
+    "n_test_per_nu": 1000,
+    "data_dir": "/home/a.bulkin/data/1D/Burgers/Train",
     "size": 128,
-    "n_layers": 3,
+    "n_layers": 4,
     "n_res": 4,
     "n_res_neck": 4,
-    "channel_multiplier": 8,
+    "channel_multiplier": 16,
     "use_bn": false,
-    "n_epochs": 3,
-    "batch_size": 8,
-    "lr": 0.001,
+    "n_epochs": 100,
+    "batch_size": 86,
+    "lr": 0.0005,
     "lr_step": 40,
     "lr_gamma": 0.5,
     "log_every": 5,

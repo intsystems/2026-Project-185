@@ -1059,7 +1059,7 @@ The discovered partition captures both sources of solution variability: on 1D Bu
 The same initial condition produces a shock at $\nu{=}0.001$ and a smooth wave at $\nu{=}1.0$, yet belongs to the same regime throughout.
 A global model conflates these two sources of variation; TEMPO separates them without supervision.
 
-TEMPO(POD) outperforms the joint POD-DeepONet baseline by 13--50\% on Burgers' and up to $4\times$ on Darcy flow, where per-parameter specialists fail catastrophically out-of-distribution.
+TEMPO(POD) outperforms the joint POD-DeepONet baseline by 13--50\% on Burgers' and up to $5\times$ on Darcy flow, where per-parameter specialists fail catastrophically out-of-distribution.
 On Navier-Stokes, TEMPO matches the POD baseline.
 TEMPO(NeuralPOD) extends the framework to nonlinear bases; closing the gap with TEMPO(POD) remains an open direction.
 
