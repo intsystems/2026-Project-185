@@ -89,29 +89,23 @@ This works well when solutions form a simple manifold, but breaks down when
 the governing parameter drives \emph{qualitatively distinct} dynamics:
 viscosity separating laminar flow from near-discontinuous shocks, or source
 magnitude producing solutions that differ by orders of magnitude in amplitude.
-In these multi-regime settings, a single global basis must compromise between
-incompatible geometries, concentrating error precisely where accurate prediction
-matters most.
+When regimes differ fundamentally, a single global basis must split its capacity across all of them, fitting none well.
 
-Several methods improve expressivity while retaining a single global
-representation.
+Several methods make the basis richer while still fitting a single model to all trajectories.
 POD-PoU~\cite{Sharma2025} trains a partition-of-unity mixture of POD bases
 with a shared branch, reducing error on sharp-gradient problems but without
 discovering the underlying regime structure.
 NeuralPOD~\cite{Mou2026} constructs nonlinear orthogonal basis functions via
 greedy residual minimization, representing each mode as a neural network and
 thus overcoming the linear subspace constraint.
-Both, however, operate on the full dataset globally and provide no operator
-for routing new inputs to the appropriate representation at inference.
+Neither, however, provides a way to route a new input to the right representation at test time.
 
 Clustering snapshots and fitting local bases to each cluster is a classical
 idea in reduced-order modeling~\cite{Amsallem2012, Hess2019}.
 Daniel et al.~\cite{Daniel2020} extend this to deep learning by clustering
 solution subspaces on the Grassmann manifold and training a dictionary
 selector at inference.
-These methods use hard cluster assignments, operate offline on fixed datasets,
-and do not couple regime discovery with the operator learning objective —
-leaving basis quality and assignment accuracy disconnected.
+These methods assign each snapshot to a single cluster offline, with no feedback between the clustering and the operator being trained on top of it.
 
 We propose \textbf{TEMPO} (\textit{Trajectory EM Mixture of POD Operators}),
 which closes this gap in a principled probabilistic framework.
@@ -690,8 +684,7 @@ We evaluate TEMPO on parametric PDE benchmarks, verifying three claims:
 structure from unlabelled snapshots;
 (ii)~locally adapted bases achieve lower reconstruction error than a
 single global basis at equal mode count;
-(iii)~a jointly-trained gated operator with regime-specific bases outperforms
-a single jointly-trained basis on benchmarks with structured regimes.
+(iii)~a gated operator with per-regime bases outperforms a single global basis when the data contains structured regimes.
 
 \subsection{Experimental Setup}
 \label{sec:setup}
@@ -783,9 +776,7 @@ TEMPO(POD) reduces error by $3$--$5\times$ over the joint POD-DeepONet baseline
 vs.\ $0.347$).
 TEMPO(NeuralPOD) improves substantially over the global NeuralPOD-DeepONet baseline
 ($\beta{=}0.1$: $3.813$ vs.\ $72.9$) but does not match TEMPO(POD).
-Recent methods (FNO, CNO) employ fundamentally different operator learning paradigms
-without explicit basis decomposition; TEMPO's contribution is discovering and
-leveraging latent regime structure through interpretable, locally-adapted bases.
+FNO and CNO do not decompose solutions into explicit bases and are not directly comparable; TEMPO's value lies in discovering interpretable regime structure, not in raw accuracy.
 
 \paragraph{2D Navier-Stokes.}
 Table~\ref{tab:ns} gives the cross-Re error matrix.
@@ -980,7 +971,7 @@ POD-DeepONet~\cite{Lu2022}
 FNO~\cite{Li2021}
   & all & \textbf{0.009} & \textbf{0.019} & \textbf{0.024} & \textbf{0.027} & 0.30 \\
 NeuralPOD-DeepONet~\textit{(ours)}
-  & all & \multicolumn{4}{c}{\textit{pend.}} & 4.87 \\
+  & all & 0.700 & 0.713 & 0.314 & 0.320 & 4.87 \\
 CNO~\cite{Raonic2023}
   & all & 0.020 & 0.035 & 0.040 & 0.043 & 0.50 \\
 TEMPO(POD)~\textit{(ours)}
@@ -1361,39 +1352,46 @@ Figure~\ref{fig:darcy_rec_collage} shows representative predictions from both TE
 \label{fig:darcy_rec_collage}
 \end{figure}
 
-\paragraph{TEMPO regime discovery \& reconstructions (2D Navier-Stokes).}
-Figure~\ref{fig:ns_rec_collage} shows the EM convergence and representative predictions from TEMPO(POD) on 2D Navier-Stokes ($M{=}4$).
+\paragraph{TEMPO reconstructions (2D Navier-Stokes).}
+Figure~\ref{fig:ns_rec_collage} shows representative predictions from TEMPO(POD) and TEMPO(NeuralPOD) on 2D Navier-Stokes ($M{=}4$); EM convergence is shown in Figure~\ref{fig:ns_em_convergence}.
 
 \begin{figure}[!htbp]
 \centering
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figs/ns_em_convergence.png}
-  \caption{EM convergence.}
-  \label{fig:ns_em_convergence}
-\end{subfigure}
-\\[1ex]
-\begin{subfigure}{\textwidth}
-  \centering
-  \includegraphics[width=\textwidth]{figs/ns_reconstruction_sample0.png}
-  \caption{Ground truth (\textit{left}), prediction (\textit{center}), point-wise absolute error (\textit{right}).}
+  \includegraphics[width=0.88\textwidth]{figs/ns_reconstruction_sample0.png}
+  \caption{TEMPO(POD): ground truth (\textit{left}), prediction (\textit{center}), point-wise absolute error (\textit{right}).}
   \label{fig:ns_reconstruction}
 \end{subfigure}
-\\[0.5ex]
+\\[0.3ex]
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.75\textwidth]{figs/ns_reconstruction_3d_sample0.png}
-  \caption{3D vorticity field visualization.}
+  \includegraphics[width=0.62\textwidth]{figs/ns_reconstruction_3d_sample0.png}
+  \caption{TEMPO(POD) — 3D vorticity field.}
   \label{fig:ns_reconstruction_3d}
 \end{subfigure}
-\caption{TEMPO(POD) on 2D Navier-Stokes ($M{=}4$): EM convergence (\textit{top}); representative predictions (\textit{middle}, \textit{bottom}).}
+\\[0.3ex]
+\begin{subfigure}{\textwidth}
+  \centering
+  \includegraphics[width=0.62\textwidth]{figs/tempo_npod_ns_reconstruction_3d_sample0.png}
+  \caption{TEMPO(NeuralPOD) — 3D vorticity field.}
+  \label{fig:ns_npod_reconstruction_3d}
+\end{subfigure}
+\caption{2D Navier-Stokes ($M{=}4$): TEMPO(POD) prediction (\textit{top}); TEMPO(POD) and TEMPO(NeuralPOD) 3D vorticity (\textit{middle}, \textit{bottom}).}
 \label{fig:ns_rec_collage}
 \end{figure}
 
 \clearpage
 \subsection{Algorithms}\label{app:alg}
 
-\begin{algorithm}[t]
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=\textwidth]{figs/ns_em_convergence.png}
+\caption{TEMPO(POD) EM convergence on 2D Navier-Stokes ($M{=}4$).}
+\label{fig:ns_em_convergence}
+\end{figure}
+
+\begin{algorithm}[H]
 \caption{\textsc{NeuralBasis}}
 \label{alg:npod}
 \begin{algorithmic}[1]
