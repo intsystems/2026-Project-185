@@ -74,7 +74,7 @@ Operator learning approximates the solution map of a parametric PDE from data, e
 
 We propose TEMPO (Trajectory EM Mixture of POD Operators), a two-phase framework for regime-aware operator learning. In the offline phase, TEMPO models the trajectory ensemble as a Gaussian mixture and recovers $M$ latent regimes via Expectation-Maximization: the E-step assigns each trajectory to regimes based on reconstruction quality, and the M-step fits a dedicated linear (POD) or nonlinear (NeuralPOD) basis to each. We prove that regime-local bases achieve reconstruction error no greater than the global rank-$K$ optimum for any soft assignment matrix and any $M$, $K$. In the online phase, a GatingNet and $M$ BranchNets are trained jointly, routing new inputs to the correct regime at inference.
 
-We evaluate TEMPO on three benchmarks. On 1D Burgers' equation, TEMPO(POD) reduces error by 13--50\% over the jointly-trained POD-DeepONet baseline across all viscosity values. On 2D Darcy flow, per-parameter specialists fail catastrophically out-of-distribution, while TEMPO(POD) reduces error by up to $5\times$. On 2D Navier-Stokes, TEMPO matches the global POD baseline. The discovered regime partition recovers structure driven by both initial conditions and the physical parameter from solution trajectories, without regime-label supervision.
+We evaluate TEMPO on three benchmarks. On 1D Burgers' equation, TEMPO(POD) reduces error by 13--50\% over the jointly-trained POD-DeepONet baseline across all viscosity values. On 2D Darcy flow, per-parameter specialists fail out-of-distribution, while TEMPO(POD) reduces error by up to $5\times$. On 2D Navier-Stokes, TEMPO matches the global POD baseline. The discovered regime partition recovers structure driven by both initial conditions and the physical parameter from solution trajectories, without regime-label supervision.
 \end{abstract}
 
 \input{highlights}
@@ -95,7 +95,7 @@ operator learning \sep parametric PDE \sep regime discovery \sep proper orthogon
 
 Reduced-order modeling of parametric PDEs constructs low-rank bases from solution snapshots to enable fast prediction at new parameter values without re-solving the governing equations~\cite{Kovachki2024}.
 The dominant approach, exemplified by POD-DeepONet~\cite{Lu2022}, fits a single global basis to the full snapshot ensemble and trains a branch network to predict expansion coefficients for unseen inputs~\cite{Lu2019}.
-This works well when solutions lie on a smooth low-dimensional manifold, but fails when the governing parameter drives \emph{qualitatively distinct} dynamics: viscosity separating laminar flow from near-discontinuous shocks, or source magnitude shifting solution amplitudes by orders of magnitude.
+This approach succeeds when solutions lie on a smooth low-dimensional manifold, but fails when the governing parameter drives \emph{qualitatively distinct} dynamics: viscosity separating laminar flow from near-discontinuous shocks, or source magnitude shifting solution amplitudes by orders of magnitude.
 A single global basis must distribute its capacity across all regimes, representing none faithfully.
 
 Partitioning the parameter space and fitting local bases to each region is the classical remedy in reduced-order modeling~\cite{Amsallem2012, Hess2019}.
@@ -105,14 +105,16 @@ These approaches reduce approximation error on multi-modal problems, but share a
 A second line of work enriches the basis while retaining a single global model.
 POD-PoU~\cite{Sharma2025} blends several POD bases via a partition-of-unity function, reducing error on sharp-gradient problems.
 NeuralPOD~\cite{Mou2026} learns nonlinear mode functions by greedy residual minimisation, overcoming the linear subspace constraint of POD.
-Both improve representational capacity but treat the full ensemble jointly, without identifying physically distinct sub-populations.
+Both improve representational capacity but treat the full ensemble jointly, without identifying distinct solution regimes.
 
 Neural operators such as FNO~\cite{Li2021} and CNO~\cite{Raonic2023} learn solution operators as discretisation-invariant functional maps, achieving high accuracy without explicit basis decompositions.
 Their purpose is complementary to the present work: they do not produce inspectable basis representations or identify latent regime structure.
 
 We propose \textbf{TEMPO} (\textit{Trajectory EM Mixture of POD Operators}),
-which addresses the feedback limitation of local reduced-order modeling in a principled probabilistic framework.
-TEMPO models the trajectory ensemble as a Gaussian mixture and recovers regime structure via Expectation-Maximization (EM): the E-step softly assigns each trajectory to regimes based on reconstruction quality, while the M-step rebuilds a dedicated explicit basis per regime, so that basis quality sharpens regime assignments and regime assignments sharpen basis fitting iteratively.
+which addresses this by coupling regime discovery directly with basis quality in a principled probabilistic framework.
+TEMPO models the trajectory ensemble as a Gaussian mixture and recovers regime structure via Expectation-Maximization (EM).
+The E-step assigns each trajectory to regimes based on reconstruction quality; the M-step fits a dedicated basis to each regime.
+Basis quality and regime assignments improve each other iteratively.
 After convergence, a GatingNet and per-regime BranchNets are trained jointly, routing new inputs to the correct regime at inference.
 
 \textbf{Contributions:}
@@ -136,7 +138,7 @@ After convergence, a GatingNet and per-regime BranchNets are trained jointly, ro
 
   \item \textbf{Experiments.} On 1D Burgers' and 2D Darcy flow, TEMPO(POD)
     reduces error by $13$--$50\%$ over the jointly-trained POD-DeepONet
-    baseline, while per-parameter specialists fail badly out-of-distribution.
+    baseline, while per-parameter specialists fail on unseen parameter values.
 \end{itemize}
 
 
@@ -426,7 +428,7 @@ DeepONet branch network to predict mode coefficients for unseen inputs.
 We adopt this combination, which we refer to as \emph{NeuralPOD-DeepONet},
 as a single-regime baseline and as the per-regime basis learner within TEMPO(NeuralPOD).
 
-The procedure follows POD-DeepONet exactly with the Fourier NeuralPOD basis substituted for POD.
+The procedure follows POD-DeepONet with the Fourier NeuralPOD basis in place of POD.
 Offline fitting yields coefficients $\boldsymbol{\lambda}^{(i)} \in \mathbb{R}^K$; online, a branch network minimizes~\eqref{eq:pod_branch_loss} and prediction follows~\eqref{eq:pod_predict}.
 At equal mode count $K$, the nonlinear basis spans a strictly richer function space than POD.
 
@@ -434,7 +436,7 @@ At equal mode count $K$, the nonlinear basis spans a strictly richer function sp
 \subsection{TEMPO: Offline Regime Discovery}\label{sec:offline}
 
 
-A single global basis — whether linear or nonlinear — must compromise
+A single global basis, whether linear or nonlinear, must compromise
 between qualitatively distinct regimes, as the optimal basis geometry
 differs fundamentally between them.
 TEMPO avoids this by constructing a dedicated basis for each of $M$
@@ -461,7 +463,7 @@ reconstructions rather than treated as a free hyperparameter:
   \label{eq:sigma2_calib}
 \end{equation}
 $\sigma^2$ is held fixed throughout EM; improving bases reduce residuals,
-which progressively sharpens regime assignments.
+which progressively sharpen regime assignments.
 
 \paragraph{E-step}
 At iteration $q$, the responsibility of trajectory $i$ for regime $m$
@@ -590,7 +592,7 @@ a new mode if $\sum_i \gamma_{im}^{(q)}\|r_m^{(K_m,i)}\|_w^2 \ge \tau\cdot\sum_i
 and prune the last mode if its weighted contribution falls below
 $\varepsilon_p$.
 The \textsc{Full rerun} case uses a cold-start random initialization,
-as warm-starting may trap gradient descent in the geometry of the previous regime.
+as warm-starting may trap gradient descent near the previous regime's basis.
 
 \paragraph{Convergence and model selection}
 The number of regimes $M$ is selected by two criteria: BIC on the EM log-likelihood
@@ -684,7 +686,7 @@ off these objectives.
 \label{sec:exp}
 
 We evaluate TEMPO on parametric PDE benchmarks, verifying three claims:
-(i)~the offline EM phase recovers interpretable, physics-consistent regime
+(i)~the offline EM phase recovers interpretable, physically meaningful regime
 structure from unlabelled snapshots;
 (ii)~locally adapted bases achieve lower reconstruction error than a
 single global basis at equal mode count;
@@ -749,7 +751,7 @@ FNO~\cite{Li2021}, and CNO~\cite{Raonic2023}, all trained jointly on all
 parameter values via a single global model.
 We introduce NeuralPOD-DeepONet (learned Fourier NeuralPOD basis with branch network);
 TEMPO(POD) and TEMPO(NeuralPOD) (regime-aware bases discovered via EM, routed by
-gating network). Per-parameter specialists serve as performance ceilings.
+gating network). Per-parameter specialists provide in-distribution reference baselines.
 All methods implemented by the authors.
 Evaluation: mean relative $L^2$ error~\eqref{eq:metric} per parameter value.
 Inference times measured on a single NVIDIA RTX A5000 GPU, per sample.
@@ -763,26 +765,26 @@ Inference times measured on a single NVIDIA RTX A5000 GPU, per sample.
 Table~\ref{tab:results} gives the cross-viscosity error matrix.
 Per-$\nu$ specialists are unviable across the full range: a $\nu{=}1.0$
 model degrades from $0.025$ to $0.461$ at $\nu{=}0.001$.
-TEMPO(POD) addresses this by discovering regime structure jointly,
-outperforming the joint POD-DeepONet baseline by 13--50\% across all~$\nu$.
+TEMPO(POD) addresses this by training across all viscosity values,
+outperforming the joint POD-DeepONet baseline by 13--50\%.
 TEMPO(NeuralPOD) does not surpass the joint baseline. NeuralPOD coefficients
 are harder to predict than POD projections, as seen already in the single-regime
-case ($0.229$ vs.\ $0.048$ at $\nu{=}0.1$); iterative EM feedback compounds this.
+case ($0.229$ vs.\ $0.048$ at $\nu{=}0.1$); iterative EM feedback amplifies the prediction difficulty.
 
 \paragraph{2D Darcy flow}
 Table~\ref{tab:darcy} gives the cross-$\beta$ matrix.
-Specialist failure is catastrophic: Darcy solutions scale linearly
+Specialists fail out-of-distribution: Darcy solutions scale linearly
 with~$\beta$, driving cross-parameter errors beyond $1000$.
 TEMPO(POD) reduces error by $3$--$5\times$ over the joint POD-DeepONet baseline
 (e.g., $\beta{=}0.1$: $0.775$ vs.\ $2.557$; $\beta{=}100$: $0.073$
 vs.\ $0.347$).
-TEMPO(NeuralPOD) improves substantially over the global NeuralPOD-DeepONet baseline
+TEMPO(NeuralPOD) improves over the global NeuralPOD-DeepONet baseline
 ($\beta{=}0.1$: $3.813$ vs.\ $72.9$) but does not match TEMPO(POD).
-FNO and CNO achieve lower absolute error by operating without explicit basis structure; the explicit regime partition and low-rank decomposition that TEMPO produces are not available from these methods.
+FNO and CNO achieve lower absolute error without explicit basis structure; the interpretable regime decomposition that TEMPO provides is not available from these methods.
 
 \paragraph{2D Navier-Stokes}
 Table~\ref{tab:ns} gives the cross-Re error matrix.
-TEMPO(POD) matches the joint POD-DeepONet baseline within $5$--$17\%$ but does not improve over it.
+TEMPO(POD) remains within $5$--$17\%$ of the joint POD-DeepONet baseline but does not improve over it.
 Unlike Burgers' and Darcy, solutions at different Re share similar dominant POD directions: the EM assigns near-uniform regime weights, and local bases bring no reconstruction advantage over the global one.
 TEMPO(NeuralPOD) ($\kappa$-initialised, $M{=}4$) converges but does not close the gap to TEMPO(POD).
 
@@ -1018,7 +1020,8 @@ The discovered regimes capture the joint structure of initial conditions and vis
 The per-viscosity gating weights
 (Table~\ref{tab:gating}, \ref{app:exp}) are nearly uniform across
 $\nu\in\{0.001,0.1,1.0\}$, closely matching the global weights
-$\boldsymbol{\pi}{=}(0.324,\,0.267,\,0.409)$: the initial condition determines regime membership, while~$\nu$ shapes within-regime dynamics; the same initial condition yields a shock at $\nu{=}0.001$ and a smooth wave at $\nu{=}1.0$.
+$\boldsymbol{\pi}{=}(0.324,\,0.267,\,0.409)$: the initial condition determines regime membership, while~$\nu$ shapes within-regime dynamics.
+The same initial condition yields a shock at $\nu{=}0.001$ and a smooth wave at $\nu{=}1.0$.
 At inference,~$\nu$ is passed to the branch network as a conditioning input, capturing both sources of solution variability.
 
 %==========================================================================
@@ -1028,7 +1031,9 @@ At inference,~$\nu$ is passed to the branch network as a conditioning input, cap
 We ablate the effect of $\kappa$ at inference by replacing it with zero or a learned prediction.
 On Burgers', TEMPO(NeuralPOD) barely needs $\kappa$: removing it costs only ${\sim}1\%$ in L2, since $u_0$ carries sufficient information to determine regime routing on this benchmark.
 TEMPO(POD) is more sensitive ($+37\%$); however, $\nu$ can be predicted from $u_0$ with $87\%$ accuracy, reducing the gap to $+7\%$.
-On Darcy, $\kappa$ is essential for TEMPO(POD): removing $\beta$ collapses gating to a fixed mixture and increases error by ${\sim}3\times$ ($+219\%$); TEMPO(NeuralPOD) is less sensitive ($+27\%$), as its richer nonlinear basis partially compensates. In both cases, $\beta$ cannot be predicted from the permeability field $a(x)$ because it is drawn independently in the dataset (classifier accuracy $21\%$, below chance).
+On Darcy, $\kappa$ is essential for TEMPO(POD): removing $\beta$ collapses gating to a fixed mixture, increasing error by ${\sim}3\times$.
+TEMPO(NeuralPOD) is less sensitive ($+27\%$), as its nonlinear basis partially compensates.
+In both cases, $\beta$ cannot be predicted from $a(x)$, as it is drawn independently in the dataset (classifier accuracy $21\%$, below chance).
 Full results are in Table~\ref{tab:kappa_abl} (\ref{app:kappa_abl}).
 
 
@@ -1038,10 +1043,11 @@ Operator learning for parametric PDEs typically relies on a single global repres
 When the governing parameter drives qualitative change in solution structure, a single global basis cannot fit all regimes well and prediction quality suffers.
 
 TEMPO discovers regime structure from solution trajectories via EM and fits a dedicated basis to each regime.
-The discovered partition captures variability driven by both initial conditions and the physical parameter: on 1D Burgers', regimes persist across all viscosity values, with~$\nu$ shaping within-regime dynamics; the same initial condition produces a shock at $\nu{=}0.001$ and a smooth wave at $\nu{=}1.0$, yet falls in the same regime throughout.
+The discovered partition captures variability driven by both initial conditions and the physical parameter.
+On 1D Burgers', regimes persist across all viscosity values: the same initial condition produces a shock at $\nu{=}0.001$ and a smooth wave at $\nu{=}1.0$, yet falls in the same regime throughout, with~$\nu$ shaping dynamics within each regime.
 A global model cannot separate these sources of variation; TEMPO recovers their structure from trajectory data without regime-label supervision.
 
-TEMPO(POD) outperforms the joint POD-DeepONet baseline by 13--50\% on Burgers' and up to $5\times$ on Darcy flow, where per-parameter specialists fail catastrophically out-of-distribution.
+TEMPO(POD) outperforms the joint POD-DeepONet baseline by 13--50\% on Burgers' and up to $5\times$ on Darcy flow, where per-parameter specialists fail to generalize.
 On Navier-Stokes, solutions at different Re share similar POD directions, and TEMPO correctly recovers the global baseline without imposing spurious structure.
 TEMPO(NeuralPOD) extends the framework to nonlinear bases; improving nonlinear basis fitting within the EM loop remains an open direction.
 
@@ -1210,7 +1216,7 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{TEMPO/main/figs/basis_spectrum_nu1.0.png}
+\includegraphics[width=\textwidth]{figs/basis_spectrum_nu1.0.png}
 \caption{Basis convergence on 1D Burgers' ($\nu{=}1.0$): POD singular-value decay (\textit{left}); Fourier NeuralPOD residual decay (\textit{right}).}
 \label{fig:basis_spectrum}
 \end{figure}
@@ -1219,14 +1225,14 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 \centering
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.9\textwidth]{TEMPO/main/figs/basis_modes_nu1.0.png}
+  \includegraphics[width=0.9\textwidth]{figs/basis_modes_nu1.0.png}
   \caption{$\nu{=}1.0$}
   \label{fig:basis_modes}
 \end{subfigure}
 \\[0.5ex]
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.9\textwidth]{TEMPO/main/figs/basis_modes_nu0.01.png}
+  \includegraphics[width=0.9\textwidth]{figs/basis_modes_nu0.01.png}
   \caption{$\nu{=}0.01$}
   \label{fig:basis_modes_nu001}
 \end{subfigure}
@@ -1236,7 +1242,7 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.85\textwidth]{TEMPO/main/pictures/Neural_POD_rec_basis.png}
+\includegraphics[width=0.85\textwidth]{figs/Neural_POD_rec_basis.png}
 \caption{Fourier NeuralPOD representative reconstructions on 1D Burgers' ($\nu{=}1.0$).}
 \label{fig:basis_rec}
 \end{figure}
@@ -1244,7 +1250,7 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.75\textwidth]{TEMPO/main/figs/basis_reconstruction_nu1.0.png}
+\includegraphics[width=0.75\textwidth]{figs/basis_reconstruction_nu1.0.png}
 \caption{Phase~1 reconstruction comparison on 1D Burgers' ($\nu{=}1.0$).
   Each row shows one sample: ground truth, POD reconstruction, $|$POD error$|$,
   Fourier NeuralPOD reconstruction, $|$FNPOD error$|$.}
@@ -1255,28 +1261,28 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 \centering
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{TEMPO/main/pictures/pod_reconstruction.png}
+  \includegraphics[width=\textwidth]{figs/pod_reconstruction.png}
   \caption{POD-DeepONet}
   \label{fig:pod_reconstruction}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{TEMPO/main/pictures/npod_reconstruction.png}
+  \includegraphics[width=\textwidth]{figs/npod_reconstruction.png}
   \caption{NeuralPOD-DeepONet}
   \label{fig:npod_reconstruction}
 \end{subfigure}
 \\[1ex]
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_burgers_reconstruct.png}
+  \includegraphics[width=\textwidth]{figs/tempo_pod_burgers_reconstruct.png}
   \caption{TEMPO(POD), $M{=}3$}
   \label{fig:tempo_pod_burgers_rec}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_npod_burgers_reconstruct.png}
+  \includegraphics[width=\textwidth]{figs/tempo_npod_burgers_reconstruct.png}
   \caption{TEMPO(NeuralPOD), $M{=}3$: high-frequency noise (L2 $0.46$--$0.54$)}
   \label{fig:tempo_npod_burgers_rec}
 \end{subfigure}
@@ -1333,14 +1339,14 @@ Figure~\ref{fig:darcy_rec_collage} shows representative predictions from both TE
 \centering
 \begin{subfigure}[t]{0.44\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_pod_darcy_reconstruct.png}
+  \includegraphics[width=\textwidth]{figs/tempo_pod_darcy_reconstruct.png}
   \caption{TEMPO(POD)}
   \label{fig:tempo_pod_darcy_rec}
 \end{subfigure}
 \hspace{0.04\textwidth}
 \begin{subfigure}[t]{0.44\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{TEMPO/main/figs/tempo_npod_darcy_reconstruct.png}
+  \includegraphics[width=\textwidth]{figs/tempo_npod_darcy_reconstruct.png}
   \caption{TEMPO(NeuralPOD)}
   \label{fig:tempo_npod_darcy_rec}
 \end{subfigure}
