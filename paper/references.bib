@@ -2,7 +2,7 @@
 
 @inproceedings{Raonic2023,
   title     = {Convolutional Neural Operators for Robust and Accurate Learning of {PDE}s},
-  author    = {Raoni{\'c}, Bogdan and Molinaro, Roberto and Mishler, Jan and Rohner, Tim and Bartolucci, Francesca and Alaifari, Rima and Mishra, Siddhartha and de B{\'e}zenac, Emmanuel},
+  author    = {Raoni{\'c}, Bogdan and Molinaro, Roberto and De Ryck, Tim and Rohner, Tim and Bartolucci, Francesca and Alaifari, Rima and Mishra, Siddhartha and de B{\'e}zenac, Emmanuel},
   booktitle = {Advances in Neural Information Processing Systems},
   volume    = {36},
   year      = {2023}
@@ -19,13 +19,13 @@
 }
 
 @article{Lu2019,
-  author = {Lu, Lu and Jin, Pengzhan and Karniadakis, George Em},
-  title = {DeepONet: Learning Nonlinear Operators for Identifying Differential Equations Based on the Universal Approximation Theorem of Operators},
-  year = {2019},
-  journal = {arXiv},
-  eprint = {1910.03193},
-  archivePrefix = {arXiv},
-  primaryClass = {cs.LG}
+  author  = {Lu, Lu and Jin, Pengzhan and Pang, Guofei and Zhang, Zhongqiang and Karniadakis, George Em},
+  title   = {Learning Nonlinear Operators via {DeepONet} Based on the Universal Approximation Theorem of Operators},
+  journal = {Nature Machine Intelligence},
+  year    = {2021},
+  volume  = {3},
+  pages   = {218--229},
+  doi     = {10.1038/s42256-021-00302-5}
 }
 
 @article{Li2020,
@@ -39,13 +39,13 @@
 }
 
 @article{Lu2022,
-  author = {Lu, Lu and Meng, Xuhui and Cai, Shengze and Mao, Zhiping and Goswami, Somdatta and Zhang, Zhongqiang and Karniadakis, George Em},
-  title = {A Comprehensive and Fair Comparison of Two Neural Operators (with Practical Extensions) Based on FAIR Data},
-  year = {2022},
-  journal = {arXiv},
-  eprint = {2111.05512},
-  archivePrefix = {arXiv},
-  primaryClass = {cs.LG}
+  author  = {Lu, Lu and Meng, Xuhui and Cai, Shengze and Mao, Zhiping and Goswami, Somdatta and Zhang, Zhongqiang and Karniadakis, George Em},
+  title   = {A Comprehensive and Fair Comparison of Two Neural Operators (with Practical Extensions) Based on {FAIR} Data},
+  journal = {Computer Methods in Applied Mechanics and Engineering},
+  year    = {2022},
+  volume  = {393},
+  pages   = {114778},
+  doi     = {10.1016/j.cma.2022.114778}
 }
 
 @article{Mou2026,
@@ -88,7 +88,61 @@
   primaryClass = {cs.LG}
 }
 
-% 2. PHYSICS-INFORMED & POD METHODS
+% 2. REDUCED ORDER MODELING & POD
+
+@article{Berkooz1993,
+  author  = {Berkooz, Gal and Holmes, Philip and Lumley, John L.},
+  title   = {The Proper Orthogonal Decomposition in the Analysis of Turbulent Flows},
+  journal = {Annual Review of Fluid Mechanics},
+  volume  = {25},
+  pages   = {539--575},
+  year    = {1993},
+  doi     = {10.1146/annurev.fl.25.010193.002543}
+}
+
+@book{Hesthaven2016,
+  author    = {Hesthaven, Jan S. and Rozza, Gianluigi and Stamm, Benjamin},
+  title     = {Certified Reduced Basis Methods for Parametrized Partial Differential Equations},
+  series    = {SpringerBriefs in Mathematics},
+  publisher = {Springer},
+  address   = {Cham},
+  year      = {2016},
+  doi       = {10.1007/978-3-319-22470-1}
+}
+
+@article{Reiss2018,
+  author  = {Reiss, Julius and Schulze, Philipp and Sesterhenn, J{\"o}rn and Mehrmann, Volker},
+  title   = {The Shifted Proper Orthogonal Decomposition: A Mode Decomposition for Multiple Transport Phenomena},
+  journal = {SIAM Journal on Scientific Computing},
+  volume  = {40},
+  number  = {3},
+  pages   = {A1322--A1344},
+  year    = {2018},
+  doi     = {10.1137/17M1140571}
+}
+
+@article{Lee2020,
+  author  = {Lee, Kookjin and Carlberg, Kevin T.},
+  title   = {Model Reduction of Dynamical Systems on Nonlinear Manifolds Using Deep Convolutional Autoencoders},
+  journal = {Journal of Computational Physics},
+  volume  = {404},
+  pages   = {108973},
+  year    = {2020},
+  doi     = {10.1016/j.jcp.2019.108973}
+}
+
+@article{Chen1995,
+  author  = {Chen, Tianping and Chen, Hong},
+  title   = {Universal Approximation to Nonlinear Operators by Neural Networks with Arbitrary Activation Functions and Its Application to Dynamical Systems},
+  journal = {IEEE Transactions on Neural Networks},
+  volume  = {6},
+  number  = {4},
+  pages   = {911--917},
+  year    = {1995},
+  doi     = {10.1109/72.392253}
+}
+
+% 3. PHYSICS-INFORMED & OTHER METHODS
 
 @article{Eivazi2024,
   author = {Eivazi, Hamidreza and Wittek, Stefan and Rausch, Andreas},
@@ -222,6 +276,16 @@
 
 
 
+@article{McInnes2018,
+  author  = {McInnes, Leland and Healy, John and Melville, James},
+  title   = {{UMAP}: Uniform Manifold Approximation and Projection for Dimension Reduction},
+  journal = {arXiv},
+  year    = {2018},
+  eprint  = {1802.03426},
+  archivePrefix = {arXiv},
+  primaryClass  = {stat.ML}
+}
+
 % 3. THEORETICAL FOUNDATIONS & EM/GMM
 
 @article{Dempster1977,
@@ -277,14 +341,12 @@
 
 % 4. APPLICATIONS
 
-@article{Takamoto2022,
-  author = {Takamoto, Makoto and Praditia, Timothy and Leiteritz, Raphael and MacKinlay, Dan and Alesiani, Francesco and Pflüger, Dirk and Niepert, Mathias},
-  title = {PDEBench: An Extensive Benchmark for Scientific Machine Learning},
-  year = {2022},
-  journal = {arXiv},
-  eprint = {2210.07182},
-  archivePrefix = {arXiv},
-  primaryClass = {cs.LG}
+@inproceedings{Takamoto2022,
+  author    = {Takamoto, Makoto and Praditia, Timothy and Leiteritz, Raphael and MacKinlay, Dan and Alesiani, Francesco and Pfl{\"u}ger, Dirk and Niepert, Mathias},
+  title     = {{PDEB}ench: An Extensive Benchmark for Scientific Machine Learning},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {35},
+  year      = {2022}
 }
 
 @article{Wang2025,

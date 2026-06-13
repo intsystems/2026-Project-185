@@ -70,17 +70,17 @@
 \affiliation{organization={Anonymous Institution}}
 
 \begin{abstract}
-Operator learning approximates the solution map of a parametric PDE from data, enabling fast prediction at new parameter values without repeated solves. The dominant approach fits a single global low-rank basis to all solution snapshots, an assumption that fails when the governing parameter drives qualitatively distinct solution regimes: smooth diffusive profiles versus near-discontinuous shocks, or solutions differing by orders of magnitude in amplitude. A single global basis must split its capacity across all regimes, faithfully representing none.
+Operator learning approximates the solution map of a parametric PDE from data, enabling fast prediction at new parameter values without repeated simulation. The dominant approach fits a single global low-rank basis to all solution snapshots --- an assumption that fails when the governing parameter drives qualitatively distinct solution regimes, such as viscosity separating smooth diffusive profiles from near-discontinuous shocks.
 
-We propose TEMPO (Trajectory EM Mixture of POD Operators), a two-phase framework for regime-aware operator learning. In the offline phase, TEMPO models the trajectory ensemble as a Gaussian mixture and recovers $M$ latent regimes via Expectation-Maximization: the E-step assigns each trajectory to regimes based on reconstruction quality, and the M-step fits a dedicated linear (POD) or nonlinear (NeuralPOD) basis to each. We prove that regime-local bases achieve reconstruction error no greater than the global rank-$K$ optimum for any soft assignment matrix and any $M$, $K$. In the online phase, a GatingNet and $M$ BranchNets are trained jointly, routing new inputs to the correct regime at inference.
+We propose TEMPO (Trajectory EM Mixture of POD Operators), a two-phase framework for regime-aware operator learning. In the offline phase, TEMPO recovers latent regimes via Expectation-Maximization, fitting a dedicated linear or nonlinear basis to each discovered regime. We prove that regime-local bases achieve reconstruction error no greater than a single global basis of the same rank. In the online phase, a gating network and per-regime branch networks are trained jointly, routing new inputs to the correct regime at inference.
 
-We evaluate TEMPO on three benchmarks. On 1D Burgers' equation, TEMPO(POD) reduces error by 13--50\% over the jointly-trained POD-DeepONet baseline across all viscosity values. On 2D Darcy flow, per-parameter specialists fail out-of-distribution, while TEMPO(POD) reduces error by up to $5\times$. On 2D Navier-Stokes, TEMPO matches the global POD baseline. The discovered regime partition recovers structure driven by both initial conditions and the physical parameter from solution trajectories, without regime-label supervision.
+TEMPO(POD) reduces error by 13--50\% over the POD-DeepONet baseline on 1D Burgers' equation. On 2D Darcy flow, per-parameter specialists fail out-of-distribution, while TEMPO(POD) reduces error by up to $4.75\times$. The discovered regime structure reflects both initial-condition shape and the physical parameter, recovered from trajectory data without regime-label supervision.
 \end{abstract}
 
 \input{highlights}
 
 \begin{graphicalabstract}
-\includegraphics[width=\textwidth]{figs/TEMPO_graphical_abstract_v5}
+\includegraphics[width=\textwidth]{figs/TEMPO_graphical_abstract}
 \end{graphicalabstract}
 
 \begin{keyword}
@@ -93,9 +93,9 @@ operator learning \sep parametric PDE \sep regime discovery \sep proper orthogon
 
 \section{Introduction}\label{sec:intro}
 
-Reduced-order modeling of parametric PDEs constructs low-rank bases from solution snapshots to enable fast prediction at new parameter values without re-solving the governing equations~\cite{Kovachki2024}.
-The dominant approach, exemplified by POD-DeepONet~\cite{Lu2022}, fits a single global basis to the full snapshot ensemble and trains a branch network to predict expansion coefficients for unseen inputs~\cite{Lu2019}.
-This approach succeeds when solutions lie on a smooth low-dimensional manifold, but fails when the governing parameter drives \emph{qualitatively distinct} dynamics: viscosity separating laminar flow from near-discontinuous shocks, or source magnitude shifting solution amplitudes by orders of magnitude.
+Reduced-order modeling of parametric PDEs constructs low-rank bases from solution snapshots to enable fast prediction at new parameter values without re-solving the governing equations~\cite{Hesthaven2016, Kovachki2024}.
+The dominant approach, exemplified by POD-DeepONet~\cite{Lu2022}, fits a single global basis to the full snapshot ensemble and trains a branch network to predict expansion coefficients for unseen inputs~\cite{Lu2019, Chen1995}.
+This approach succeeds when solutions lie on a smooth low-dimensional manifold, but fails when the governing parameter drives qualitatively distinct dynamics: viscosity separating laminar flow from near-discontinuous shocks~\cite{Reiss2018}, or source magnitude shifting solution amplitudes by orders of magnitude.
 A single global basis must distribute its capacity across all regimes, representing none faithfully.
 
 Partitioning the parameter space and fitting local bases to each region is the classical remedy in reduced-order modeling~\cite{Amsallem2012, Hess2019}.
@@ -104,15 +104,16 @@ These approaches reduce approximation error on multi-modal problems, but share a
 
 A second line of work enriches the basis while retaining a single global model.
 POD-PoU~\cite{Sharma2025} blends several POD bases via a partition-of-unity function, reducing error on sharp-gradient problems.
-NeuralPOD~\cite{Mou2026} learns nonlinear mode functions by greedy residual minimisation, overcoming the linear subspace constraint of POD.
-Both improve representational capacity but treat the full ensemble jointly, without identifying distinct solution regimes.
+Nonlinear ROM using deep autoencoders~\cite{Lee2020} has demonstrated that low-dimensional nonlinear manifolds can dramatically outperform linear subspaces.
+NeuralPOD~\cite{Mou2026} pursues this direction for operator learning, learning nonlinear mode functions by greedy residual minimisation.
+These approaches improve representational capacity but treat the full ensemble jointly, without identifying distinct solution regimes.
 
 Neural operators such as FNO~\cite{Li2021} and CNO~\cite{Raonic2023} learn solution operators as discretisation-invariant functional maps, achieving high accuracy without explicit basis decompositions.
 Their purpose is complementary to the present work: they do not produce inspectable basis representations or identify latent regime structure.
 
 We propose \textbf{TEMPO} (\textit{Trajectory EM Mixture of POD Operators}),
 which addresses this by coupling regime discovery directly with basis quality in a principled probabilistic framework.
-TEMPO models the trajectory ensemble as a Gaussian mixture and recovers regime structure via Expectation-Maximization (EM).
+TEMPO models the trajectory ensemble as a Gaussian mixture and recovers regime structure via Expectation-Maximization (EM) \cite{Dempster1977}.
 The E-step assigns each trajectory to regimes based on reconstruction quality; the M-step fits a dedicated basis to each regime.
 Basis quality and regime assignments improve each other iteratively.
 After convergence, a GatingNet and per-regime BranchNets are trained jointly, routing new inputs to the correct regime at inference.
@@ -136,9 +137,10 @@ After convergence, a GatingNet and per-regime BranchNets are trained jointly, ro
     any soft-assignment matrix and any $M$, $K$
     (Proposition~\ref{prop:advantage}).
 
-  \item \textbf{Experiments.} On 1D Burgers' and 2D Darcy flow, TEMPO(POD)
-    reduces error by $13$--$50\%$ over the jointly-trained POD-DeepONet
-    baseline, while per-parameter specialists fail on unseen parameter values.
+  \item \textbf{Experiments.} On 1D Burgers', TEMPO(POD) reduces error by
+    $13$--$50\%$ over the jointly-trained POD-DeepONet baseline; on 2D Darcy
+    flow, error is reduced by up to $4.75\times$, while per-parameter
+    specialists fail on unseen parameter values.
 \end{itemize}
 
 
@@ -161,10 +163,9 @@ $\Omega \times \mathcal{T}$, with weighted norm $\|f\|_w^2 = \sum_j w_j f(y_j)^2
 
 \begin{figure}[!ht]
   \centering
-  \includegraphics[width=0.45\textwidth]{figs/regimes_fig.png}
+  \includegraphics[width=0.45\textwidth]{figs/burgers_dataset.png}
     \caption{Training dataset $\cD$: solution trajectories $s^{(i)}$ on
-$\Omega\times\mathcal{T}$ for different $\kappa^{(i)}\in\cK$. Solutions
-change character fundamentally across parameter values.}
+$\Omega\times\mathcal{T}$ for different $\kappa^{(i)}\in\cK$.}
 
   \label{fig:dataset}
 \end{figure}
@@ -183,7 +184,7 @@ The operator $\cG$ is unknown and expensive to evaluate directly. The \emph{oper
 
 \paragraph{Multi-regime assumption}
 
-When solutions change character fundamentally across $\cK$, the optimal low-dimensional representation differs from regime to regime, and no single global basis captures the full solution diversity. We formalize this observation via a latent variable model over the trajectory ensemble.
+When solutions change character across $\cK$, the optimal low-dimensional representation differs from regime to regime, and no single global basis captures the full solution diversity. We formalize this observation via a latent variable model over the trajectory ensemble.
 
 \begin{definition}[Generative model]
 \label{def:generative}
@@ -215,8 +216,7 @@ The generative model leaves $\hats_m^{(i)}$ unspecified. We require only that it
 where $\phi_k^{(m)} : \Omega\times\mathcal{T}\to\mathbb{R}$ are spatiotemporal
 mode functions and $\lambda_k^{(m,i)} \in \mathbb{R}$ a scalar amplitude
 for trajectory~$i$ on mode~$k$.
-This form encompasses POD~\citep{Lu2022} and learned neural bases~\citep{Mou2026};
-in this work we adopt the latter.
+The linear case recovers POD-DeepONet~\citep{Lu2022}; the nonlinear case recovers NeuralPOD~\citep{Mou2026}. Both are studied in this work.
 
 \begin{definition}[Regime approximator]
 \label{def:approx}
@@ -316,6 +316,7 @@ TEMPO(NeuralPOD) (nonlinear, $M$ regimes).
 
 \subsubsection{POD Basis}
 
+Proper Orthogonal Decomposition (POD)~\cite{Berkooz1993} extracts a hierarchy of orthogonal modes that capture the maximum energy from the snapshot ensemble.
 Let $\phi_0 := \bar{s} = \tfrac{1}{N}\sum_i s^{(i)}$ be the mean field
 and $\tilde{S} \in \mathbb{R}^{N_y \times N}$ the matrix with columns
 $\tilde{s}^{(i)} = s^{(i)} - \phi_0$.
@@ -530,9 +531,6 @@ are the global and regime-wise optimal rank-$K$ reconstruction errors.
 Proof: \ref{app:proof}.
 \end{proposition}
 
-\begin{remark}
-Both $\varepsilon_{\mathrm{TEMPO}}^K$ and $\varepsilon_{\mathrm{global}}^K$ use exactly $K$ basis functions per sample at inference; TEMPO stores $M$ regime-specific bases of rank $K$ offline, but routes each sample through exactly one.
-\end{remark}
 
 \begin{figure}[!htbp]
 \centering
@@ -541,8 +539,7 @@ Both $\varepsilon_{\mathrm{TEMPO}}^K$ and $\varepsilon_{\mathrm{global}}^K$ use 
   \textit{Left}: normalized reconstruction error (log scale); TEMPO lies strictly
   below the global POD for all $K\geq 1$.
   \textit{Right}: relative gain
-  $(\varepsilon^K_{\mathrm{global}}-\varepsilon^K_{\mathrm{TEMPO}})/\varepsilon^K_{\mathrm{global}}$;
-  all values are non-negative, with gains of $20$--$39\%$ at $K{=}10$.}
+  $(\varepsilon^K_{\mathrm{global}}-\varepsilon^K_{\mathrm{TEMPO}})/\varepsilon^K_{\mathrm{global}}$}
 \label{fig:theorem}
 \end{figure}
 
@@ -606,9 +603,9 @@ Figure~\ref{fig:umap_em} shows the resulting regime structure on 1D Burgers': th
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{figs/TEMPO_phase1_burgers_pod_M3.png}
+\includegraphics[width=\textwidth]{figs/burgers_pod_phase1.png}
 \caption{TEMPO(POD) regime structure on 1D Burgers' ($M{=}3$, 20 EM iterations).
-  \textit{Left:} UMAP colored by regime.
+  \textit{Left:} UMAP \cite{McInnes2018} colored by regime.
   \textit{Center:} same embedding colored by~$\nu$.
   \textit{Right:} GMM fit in POD coefficient space $(\alpha_1,\alpha_2)$;
   stars mark regime centroids~$\mu_m$.}
@@ -775,9 +772,9 @@ case ($0.229$ vs.\ $0.048$ at $\nu{=}0.1$); iterative EM feedback amplifies the 
 Table~\ref{tab:darcy} gives the cross-$\beta$ matrix.
 Specialists fail out-of-distribution: Darcy solutions scale linearly
 with~$\beta$, driving cross-parameter errors beyond $1000$.
-TEMPO(POD) reduces error by $3$--$5\times$ over the joint POD-DeepONet baseline
-(e.g., $\beta{=}0.1$: $0.775$ vs.\ $2.557$; $\beta{=}100$: $0.073$
-vs.\ $0.347$).
+TEMPO(POD) reduces error by up to $4.75\times$ over the joint POD-DeepONet baseline
+($\beta{=}0.1$: $0.775$ vs.\ $2.557$, $3.3\times$; $\beta{=}100$: $0.073$
+vs.\ $0.347$, $4.75\times$; $\beta{=}1.0$: $2.0\times$; $\beta{=}10$: $1.3\times$).
 TEMPO(NeuralPOD) improves over the global NeuralPOD-DeepONet baseline
 ($\beta{=}0.1$: $3.813$ vs.\ $72.9$) but does not match TEMPO(POD).
 FNO and CNO achieve lower absolute error without explicit basis structure; the interpretable regime decomposition that TEMPO provides is not available from these methods.
@@ -789,9 +786,10 @@ Unlike Burgers' and Darcy, solutions at different Re share similar dominant POD 
 TEMPO(NeuralPOD) ($\kappa$-initialised, $M{=}4$) converges but does not close the gap to TEMPO(POD).
 
 \paragraph{Inference speed}
-Routing each sample through a single regime basis keeps TEMPO(POD) fast.
+TEMPO(POD) evaluates all $M$ branch networks via soft gating, remaining fast relative to FNO and CNO.
 On Burgers', TEMPO(POD) requires $0.025$~ms per sample versus $9.90$~ms for FNO ($400{\times}$ faster) and $2.14$~ms for CNO ($86{\times}$ faster); on Darcy, $0.006$~ms versus $0.587$~ms (FNO) and $2.24$~ms (CNO).
-The overhead relative to POD-DeepONet is modest ($0.025$ vs.\ $0.004$~ms on Burgers'), reflecting the additional gating network and $M$ branch evaluations of which only one is active per sample.
+The overhead relative to POD-DeepONet is modest ($0.025$ vs.\ $0.004$~ms on Burgers'), reflecting the additional gating network and $M$ branch evaluations.
+In latency-critical settings, replacing soft gating with hard routing (selecting a single branch per sample) could reduce this overhead further.
 
 % TABLE 1: Burgers
 \begin{table}[!htbp]
@@ -1047,8 +1045,8 @@ The discovered partition captures variability driven by both initial conditions 
 On 1D Burgers', regimes persist across all viscosity values: the same initial condition produces a shock at $\nu{=}0.001$ and a smooth wave at $\nu{=}1.0$, yet falls in the same regime throughout, with~$\nu$ shaping dynamics within each regime.
 A global model cannot separate these sources of variation; TEMPO recovers their structure from trajectory data without regime-label supervision.
 
-TEMPO(POD) outperforms the joint POD-DeepONet baseline by 13--50\% on Burgers' and up to $5\times$ on Darcy flow, where per-parameter specialists fail to generalize.
-On Navier-Stokes, solutions at different Re share similar POD directions, and TEMPO correctly recovers the global baseline without imposing spurious structure.
+TEMPO(POD) outperforms the joint POD-DeepONet baseline by 13--50\% on Burgers' and up to $4.75\times$ on Darcy flow, where per-parameter specialists fail to generalize.
+On Navier-Stokes, solutions at different Re share similar POD directions; TEMPO identifies this and remains within 5--17\% of the global baseline.
 TEMPO(NeuralPOD) extends the framework to nonlinear bases; improving nonlinear basis fitting within the EM loop remains an open direction.
 
 Several directions remain open.
@@ -1216,7 +1214,7 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{figs/basis_spectrum_nu1.0.png}
+\includegraphics[width=\textwidth]{figs/burgers_basis_spectrum.png}
 \caption{Basis convergence on 1D Burgers' ($\nu{=}1.0$): POD singular-value decay (\textit{left}); Fourier NeuralPOD residual decay (\textit{right}).}
 \label{fig:basis_spectrum}
 \end{figure}
@@ -1225,14 +1223,14 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 \centering
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.9\textwidth]{figs/basis_modes_nu1.0.png}
+  \includegraphics[width=0.9\textwidth]{figs/burgers_basis_modes_nu1.png}
   \caption{$\nu{=}1.0$}
   \label{fig:basis_modes}
 \end{subfigure}
 \\[0.5ex]
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.9\textwidth]{figs/basis_modes_nu0.01.png}
+  \includegraphics[width=0.9\textwidth]{figs/burgers_basis_modes_nu001.png}
   \caption{$\nu{=}0.01$}
   \label{fig:basis_modes_nu001}
 \end{subfigure}
@@ -1242,7 +1240,7 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.85\textwidth]{figs/Neural_POD_rec_basis.png}
+\includegraphics[width=0.85\textwidth]{figs/burgers_npod_reconstruct_samples.png}
 \caption{Fourier NeuralPOD representative reconstructions on 1D Burgers' ($\nu{=}1.0$).}
 \label{fig:basis_rec}
 \end{figure}
@@ -1250,7 +1248,7 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.75\textwidth]{figs/basis_reconstruction_nu1.0.png}
+\includegraphics[width=0.75\textwidth]{figs/burgers_basis_reconstruct.png}
 \caption{Phase~1 reconstruction comparison on 1D Burgers' ($\nu{=}1.0$).
   Each row shows one sample: ground truth, POD reconstruction, $|$POD error$|$,
   Fourier NeuralPOD reconstruction, $|$FNPOD error$|$.}
@@ -1261,28 +1259,28 @@ Per-sample reconstructions from both bases are compared in Figure~\ref{fig:basis
 \centering
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figs/pod_reconstruction.png}
+  \includegraphics[width=\textwidth]{figs/burgers_pod_deeponet_reconstruct.png}
   \caption{POD-DeepONet}
   \label{fig:pod_reconstruction}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figs/npod_reconstruction.png}
+  \includegraphics[width=\textwidth]{figs/burgers_npod_deeponet_reconstruct.png}
   \caption{NeuralPOD-DeepONet}
   \label{fig:npod_reconstruction}
 \end{subfigure}
 \\[1ex]
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figs/tempo_pod_burgers_reconstruct.png}
+  \includegraphics[width=\textwidth]{figs/burgers_tempo_pod_reconstruct.png}
   \caption{TEMPO(POD), $M{=}3$}
   \label{fig:tempo_pod_burgers_rec}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figs/tempo_npod_burgers_reconstruct.png}
+  \includegraphics[width=\textwidth]{figs/burgers_tempo_npod_reconstruct.png}
   \caption{TEMPO(NeuralPOD), $M{=}3$: high-frequency noise (L2 $0.46$--$0.54$)}
   \label{fig:tempo_npod_burgers_rec}
 \end{subfigure}
@@ -1301,7 +1299,7 @@ On Navier-Stokes, all Re values overlap in POD coefficient space and regimes 2--
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\textwidth]{figs/ns_em_convergence.png}
+\includegraphics[width=\textwidth]{figs/ns_pod_em_convergence.png}
 \caption{TEMPO(POD) EM convergence on 2D Navier-Stokes ($M{=}4$).}
 \label{fig:ns_em_convergence}
 \end{figure}
@@ -1310,21 +1308,21 @@ On Navier-Stokes, all Re values overlap in POD coefficient space and regimes 2--
 \centering
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.85\textwidth]{figs/TEMPO_phase1_burgers_npod_M3.png}
+  \includegraphics[width=0.85\textwidth]{figs/burgers_npod_phase1.png}
   \caption{1D Burgers', NeuralPOD ($M{=}3$, $H{=}0.23$)}
   \label{fig:umap_em_npod}
 \end{subfigure}
 \\[0.5ex]
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.85\textwidth]{figs/TEMPO_phase1_darcy_pod_M4.png}
-  \caption{2D Darcy flow, POD ($M{=}4$)}
+  \includegraphics[width=0.85\textwidth]{figs/darcy_pod_phase1.png}
+  \caption{2D Darcy flow, POD ($M{=}4$, shown as example)}
   \label{fig:tempo_phase1_darcy}
 \end{subfigure}
 \\[0.5ex]
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.85\textwidth]{figs/ns_tempo_phase1.png}
+  \includegraphics[width=0.85\textwidth]{figs/ns_pod_phase1.png}
   \caption{2D Navier-Stokes, POD ($M{=}4$): no Re separation}
   \label{fig:ns_tempo_phase1}
 \end{subfigure}
@@ -1339,14 +1337,14 @@ Figure~\ref{fig:darcy_rec_collage} shows representative predictions from both TE
 \centering
 \begin{subfigure}[t]{0.44\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figs/tempo_pod_darcy_reconstruct.png}
+  \includegraphics[width=\textwidth]{figs/darcy_tempo_pod_reconstruct.png}
   \caption{TEMPO(POD)}
   \label{fig:tempo_pod_darcy_rec}
 \end{subfigure}
 \hspace{0.04\textwidth}
 \begin{subfigure}[t]{0.44\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figs/tempo_npod_darcy_reconstruct.png}
+  \includegraphics[width=\textwidth]{figs/darcy_tempo_npod_reconstruct.png}
   \caption{TEMPO(NeuralPOD)}
   \label{fig:tempo_npod_darcy_rec}
 \end{subfigure}
@@ -1361,21 +1359,21 @@ Figure~\ref{fig:ns_rec_collage} shows representative predictions from TEMPO(POD)
 \centering
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.88\textwidth]{figs/ns_reconstruction_sample0.png}
+  \includegraphics[width=0.88\textwidth]{figs/ns_tempo_pod_reconstruct.png}
   \caption{TEMPO(POD): ground truth (\textit{left}), prediction (\textit{center}), point-wise absolute error (\textit{right}).}
   \label{fig:ns_reconstruction}
 \end{subfigure}
 \\[0.3ex]
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.55\textwidth]{figs/ns_reconstruction_3d_sample0.png}
+  \includegraphics[width=0.55\textwidth]{figs/ns_tempo_pod_reconstruct_3d.png}
   \caption{TEMPO(POD) — 3D vorticity field.}
   \label{fig:ns_reconstruction_3d}
 \end{subfigure}
 \\[0.3ex]
 \begin{subfigure}{\textwidth}
   \centering
-  \includegraphics[width=0.62\textwidth]{figs/tempo_npod_ns_reconstruction_3d_sample0.png}
+  \includegraphics[width=0.62\textwidth]{figs/ns_tempo_npod_reconstruct_3d.png}
   \caption{TEMPO(NeuralPOD) — 3D vorticity field.}
   \label{fig:ns_npod_reconstruction_3d}
 \end{subfigure}
