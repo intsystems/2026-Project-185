@@ -26,15 +26,7 @@ class PODDeepONetConfig:
 
 
 class BranchNet(nn.Module):
-    """Maps (u0_sensors, kappa) to P mode coefficients.
-
-    Args:
-        m:          number of sensor points
-        P:          number of modes
-        hidden_dim: hidden layer width
-        n_layers:   network depth
-        d_kappa:    parameter dimension; 0 means kappa is not used
-    """
+    """Maps (u0_sensors, kappa) to P mode coefficients."""
 
     def __init__(self, m: int, P: int, hidden_dim: int = 128, n_layers: int = 4,
                  d_kappa: int = 0) -> None:
@@ -43,27 +35,13 @@ class BranchNet(nn.Module):
         self.net = _mlp(m + d_kappa, P, hidden_dim, n_layers, act=nn.Tanh)
 
     def forward(self, u0: Tensor, kappa: Tensor = None) -> Tensor:
-        """
-        Args:
-            u0:    (N, m)
-            kappa: (N, d_kappa) or None
-        Returns:
-            (N, P)
-        """
+        """Returns (N, P) mode coefficients."""
         inp = torch.cat([u0, kappa], dim=-1) if self.d_kappa > 0 else u0
         return self.net(inp)
 
 
 class PODDeepONet(nn.Module):
-    """POD-DeepONet for time-dependent PDEs (Lu et al., 2022).
-
-    Prediction: mean(x,t) + branch(u_0) @ Phi(x,t).T
-    where Phi (Nt*Nx, P) are spatiotemporal POD modes from Phase 1.
-
-    Args:
-        basis:  trained PODBasis with spatiotemporal modes
-        branch: BranchNet trained in Phase 2
-    """
+    """POD-DeepONet: mean + branch(u0) @ Phi.T (Lu et al., 2022)."""
 
     def __init__(self, basis: PODBasis, branch: BranchNet) -> None:
         super().__init__()
@@ -77,25 +55,13 @@ class PODDeepONet(nn.Module):
         return self.basis.num_modes
 
     def forward(self, u0: Tensor, kappa: Tensor = None) -> Tensor:
-        """
-        Args:
-            u0:    (N, m) — initial conditions at sensor points
-            kappa: (N, d_kappa) or None
-        Returns:
-            (N, Nt*Nx) — predicted spatiotemporal field; reshape to (N, Nt, Nx)
-        """
+        """Returns (N, Nt*Nx) predicted spatiotemporal field."""
         beta = self.branch(u0, kappa)                      # (N, P)
         return self.basis.mean + beta @ self.basis.modes.T # (N, Nt*Nx)
 
 
 class PODDeepONetTrainer:
-    """Two-stage trainer for POD-DeepONet.
-
-    Phase 1 (external): PODTrainer.train(s_traj) where s_traj is (N, Nt*Nx).
-        Produces basis.mean (Nt*Nx,), basis.modes (Nt*Nx, P), basis.coeffs (N, P).
-
-    Phase 2 (this class): train branch net u_0 → coeffs using basis.coeffs as targets.
-    """
+    """Trains the branch net (Phase 2) given a frozen POD basis from Phase 1."""
 
     def __init__(self, model: PODDeepONet, cfg: PODDeepONetConfig) -> None:
         self.model = model
@@ -103,16 +69,7 @@ class PODDeepONetTrainer:
         self.val_history: list[tuple] = []
 
     def train(self, u0: Tensor, val_u0: Tensor = None, val_s: Tensor = None) -> list[float]:
-        """Train the branch net on POD coefficient regression.
-
-        Args:
-            u0:     (N_traj, Nx)  — input fields at full spatial resolution
-            val_u0: (N_val, Nx)   — validation inputs (optional)
-            val_s:  (N_val, Nxy)  — validation snapshot targets (optional, CPU tensor ok)
-
-        Returns:
-            per-epoch train MSE losses on POD coefficients; val history in self.val_history
-        """
+        """Train branch net on POD coefficient regression. Returns per-epoch train MSE."""
         basis = self.model.basis
         assert basis._initialized, "Run PODTrainer.train(s_traj) first."
 
@@ -168,14 +125,7 @@ class PODDeepONetTrainer:
 
     @torch.no_grad()
     def predict(self, u0_new: Tensor) -> Tensor:
-        """Predict full spatiotemporal trajectories for new initial conditions.
-
-        Args:
-            u0_new: (N, Nx) — initial conditions at full spatial resolution
-
-        Returns:
-            (N, Nt*Nx) — reshape to (N, Nt, Nx) for visualization
-        """
+        """Returns (N, Nt*Nx) predicted trajectories for new initial conditions."""
         device = next(self.model.parameters()).device
         u0_sensors = u0_new[:, ::self.cfg.sensor_stride].to(device)
         self.model.eval()

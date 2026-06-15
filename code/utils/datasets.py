@@ -108,7 +108,6 @@ def load_stacked(
 
     Returns: s (N_total, Nt*Nx), kappa (N_total,), x_np, t_np, Nx, Nt
     """
-    # probe first file for grid shape
     _, path0 = entries[0]
     with h5py.File(path0, "r") as f:
         shape = f["tensor"].shape           # (N_file, Nt, Nx) or (N_file, Nt, Nx, 1)
@@ -124,7 +123,7 @@ def load_stacked(
     print(f"Nt={Nt}, Nx={Nx}, n_per_kappa={n_per}, "
           f"N_total={n_total}, s≈{n_total*Ny*4/1e9:.1f} GB")
 
-    # pre-allocate — avoids concatenation peak
+    # pre-allocate to avoid concatenation peak
     s     = np.empty((n_total, Ny), dtype=np.float32)
     kappa = np.empty(n_total,       dtype=np.float32)
 
@@ -132,7 +131,7 @@ def load_stacked(
         with h5py.File(path, "r") as f:
             u = f["tensor"][:n_per]         # HDF5 reads only n_per rows
         if u.ndim == 4:
-            u = u[..., 0]                   # (N, Nt, Nx, 1) -> (N, Nt, Nx)
+            u = u[..., 0]  # (N, Nt, Nx, 1) -> (N, Nt, Nx)
         sl        = slice(i * n_per, (i + 1) * n_per)
         s[sl]     = u.reshape(n_per, Ny).astype(np.float32, copy=False)
         kappa[sl] = kappa_val
@@ -249,7 +248,7 @@ def load_ns_stacked(
         vel = vel[:n_want]
         n_loaded = len(vel)
 
-        u0_batch = vel[:, 0, :, :, :].reshape(n_loaded, Nxy * 2).astype(np.float32)
+        u0_batch = vel[:, 0].reshape(n_loaded, Nxy * 2).astype(np.float32)
         s_batch  = vel.reshape(n_loaded, Nxyt * 2).astype(np.float32)
 
         s[pos:pos + n_loaded]  = s_batch
@@ -259,16 +258,14 @@ def load_ns_stacked(
         del vel, u0_batch, s_batch
         print(f"  Re={re_val}: {n_loaded} trajectories loaded")
 
-    # Trim pre-allocated arrays to actual size
     s     = s[:pos]
     u0    = u0[:pos]
     kappa = kappa[:pos]
 
-    # Create spatial grid
     x_np = np.linspace(0, 1, Nx, dtype=np.float32)
     y_np = np.linspace(0, 1, Ny, dtype=np.float32)
-    xx, yy = np.meshgrid(x_np, y_np, indexing="ij")  # (Nx, Ny) each
-    xy_np = np.stack([xx.ravel(), yy.ravel()], axis=1).astype(np.float32)  # (Nxy, 2)
+    xx, yy = np.meshgrid(x_np, y_np, indexing="ij")
+    xy_np = np.stack([xx.ravel(), yy.ravel()], axis=1).astype(np.float32)
 
     return s, u0, kappa, xy_np, Nx, Ny, Nt
 

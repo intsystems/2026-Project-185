@@ -55,16 +55,7 @@ class FourierNeuralPODConfig:
 
 
 class FourierNeuralPODTrainer:
-    """Sequential mode extraction with Fourier spatial basis.
-
-    Batching is over N (trajectories), not Ny (spatial points).
-    phi(x) and mean_net(x) are computed once per epoch on the GPU (Ny,).
-    Trajectory batches r[i:i+B] are moved from CPU to GPU inside the loop.
-    lambda_ten lives on the GPU (N scalars per mode — always tiny).
-
-    This keeps the GPU busy with large (Ny, B) matrix ops regardless of GPU size.
-    s and r stay on CPU so datasets of arbitrary size are supported.
-    """
+    """Sequential mode extraction with Fourier spatial basis. Trajectories batched over N; s stays on CPU."""
 
     def __init__(self, basis: FourierRegimeBasis, cfg: FourierNeuralPODConfig) -> None:
         self.basis = basis
@@ -81,15 +72,7 @@ class FourierNeuralPODTrainer:
         kappa: Tensor = None,
         gamma: Tensor = None,
     ) -> TrainHistory:
-        """Extract mean and modes from snapshot matrix.
-
-        Args:
-            s:     (N, Ny) snapshot matrix — may be on CPU
-            x:     (Ny, d_x) spatial grid — moved to network device
-            t:     unused
-            kappa: unused
-            gamma: (N,) responsibility weights; uniform 1/N if None
-        """
+        """Extract mean and modes greedily. gamma defaults to uniform 1/N."""
         N, Ny = s.shape
         dtype = s.dtype
         dev = self._device
@@ -187,11 +170,10 @@ class FourierNeuralPODTrainer:
 
         subset_n = max(B, int(self.cfg.epoch_subset * N))
 
-        # top-k by gamma so high-responsibility trajectories are always included
+        # top-k by gamma ensures high-responsibility trajectories are always included
         idx_subset = gamma_cpu.topk(subset_n).indices
         idx_subset_dev = idx_subset.to(dev)
 
-        # preload to gpu to avoid repeated cpu-gpu transfers per epoch
         r_sub_dev = r[idx_subset].to(dev)
         gamma_sub = gamma_dev[idx_subset_dev]
 
@@ -205,7 +187,7 @@ class FourierNeuralPODTrainer:
 
             perm = torch.randperm(subset_n, device=dev)
 
-            phi = mode.phi(x)  # evaluated once per epoch, shared across mini-batches
+            phi = mode.phi(x)  # computed once per epoch, shared across mini-batches
 
             for start in range(0, subset_n, B):
                 idx_b_dev = perm[start : start + B]

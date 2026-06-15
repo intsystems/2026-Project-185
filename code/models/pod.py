@@ -38,13 +38,7 @@ class PODBasis(nn.Module):
         self._initialized = False
 
     def initialize(self, mean: Tensor, modes: Tensor, coeffs: Tensor) -> None:
-        """Store SVD results as buffers.
-
-        Args:
-            mean:   (Ny,)   weighted mean snapshot
-            modes:  (Ny, P) orthonormal POD modes (right singular vectors)
-            coeffs: (N, P)  projection coefficients for training snapshots
-        """
+        """Store SVD results (mean, modes, coeffs) as non-trainable buffers."""
         self.register_buffer("mean", mean)
         self.register_buffer("modes", modes)
         self.register_buffer("coeffs", coeffs)
@@ -60,11 +54,7 @@ class PODBasis(nn.Module):
 
 
 class PODTrainer:
-    """Classical POD via SVD with optional responsibility weighting.
-
-    Computes weighted mean, centers snapshots, runs SVD, selects modes
-    by variance threshold. Stores basis for reconstruction and comparison
-    """
+    """Classical POD via SVD with optional responsibility weighting."""
 
     def __init__(self, cfg: PODConfig) -> None:
         self.cfg = cfg
@@ -80,18 +70,7 @@ class PODTrainer:
         kappa: Tensor = None,
         gamma: Tensor = None,
     ) -> TrainHistory:
-        """Compute POD basis via SVD.
-
-        Args:
-            s:     (N, Ny) snapshot matrix
-            x:     (Ny, d_x) spatial grid; unused, POD is grid-based
-            t:     unused
-            kappa: unused
-            gamma: (N,) responsibility weights; uniform 1/N if None
-
-        Returns:
-            TrainHistory with residual_norms per mode
-        """
+        """Compute weighted POD basis via SVD. gamma defaults to uniform 1/N."""
         N, Ny = s.shape
         dtype = s.dtype
         dev = s.device
@@ -108,7 +87,6 @@ class PODTrainer:
 
         sqrt_gamma = gamma.sqrt()
         if gpu != s.device:
-            # move to GPU before centering to avoid a large CPU intermediate copy
             s_weighted_gpu = s.to(gpu, dtype=torch.float32)
             s_weighted_gpu.sub_(mean.to(gpu)).mul_(sqrt_gamma.to(gpu).unsqueeze(1))
         else:

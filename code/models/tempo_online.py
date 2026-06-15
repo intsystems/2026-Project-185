@@ -16,15 +16,7 @@ from .fourier_neural_pod import FourierNeuralPODTrainer
 
 @torch.no_grad()
 def _eval_basis(trainer, x: Tensor) -> tuple[Tensor, Tensor]:
-    """Extract frozen (mean, modes) from a regime trainer.
-
-    Args:
-        trainer: PODTrainer or FourierNeuralPODTrainer
-        x:       (Ny, d_x) coordinate grid on the target device
-    Returns:
-        mean:  (Ny,)
-        modes: (Ny, P)
-    """
+    """Returns (mean (Ny,), modes (Ny, P)) for a PODTrainer or FourierNeuralPODTrainer."""
     if isinstance(trainer, PODTrainer):
         return (
             trainer.basis.mean.to(x.device),
@@ -67,11 +59,7 @@ class GatingNet(nn.Module):
 class TEMPOOnline(nn.Module):
     """Gated operator with M frozen regime bases (Phase 2).
 
-    Prediction (eq. 10):
-        s_hat = sum_m w_m(u0, kappa) [mean_m(x) + branch_m(u0, kappa) @ Phi_m(x).T]
-
-    Trainable: GatingNet + M BranchNets (with d_kappa > 0).
-    Frozen bases (means, modes) are precomputed and passed to forward.
+    s_hat = sum_m w_m(u0, kappa) * [mean_m(x) + branch_m(u0, kappa) @ Phi_m(x).T]
     """
 
     def __init__(self, gating: GatingNet, branches: nn.ModuleList) -> None:
@@ -90,16 +78,7 @@ class TEMPOOnline(nn.Module):
         means: list[Tensor],
         modes: list[Tensor],
     ) -> tuple[Tensor, Tensor]:
-        """
-        Args:
-            u0:    (N, m_sensors)
-            kappa: (N, d_kappa)
-            means: M x (Ny,)
-            modes: M x (Ny, P_m)
-        Returns:
-            s_hat: (N, Ny)
-            w:     (N, M) gating weights
-        """
+        """Returns (s_hat (N, Ny), w (N, M) gating weights)."""
         w = self.gating(u0, kappa)
         s_hat = torch.zeros(u0.shape[0], means[0].shape[0],
                             device=u0.device, dtype=u0.dtype)
@@ -127,12 +106,7 @@ class TEMPOOnlineConfig:
 class TEMPOOnlineTrainer:
     """Phase 2 trainer: GatingNet + M BranchNets with frozen bases.
 
-    Loss (eq. 11):
-        L = L_data + lambda_kl * L_KL - lambda_ent * L_ent
-
-        L_data = mean_i || s^(i) - s_hat^(i) ||^2
-        L_KL   = mean_i sum_m  w_m^(i) log(w_m^(i) / gamma_im*)
-        L_ent  = mean_i sum_m -w_m^(i) log(w_m^(i))
+    L = L_data + lambda_kl * KL(w || gamma*) - lambda_ent * H(w)
     """
 
     def __init__(self, model: TEMPOOnline, cfg: TEMPOOnlineConfig) -> None:
@@ -142,15 +116,15 @@ class TEMPOOnlineTrainer:
 
     def train(
         self,
-        s: Tensor,           # (N, Ny)     full trajectories, CPU ok
-        u0: Tensor,          # (N, Nx)     initial conditions, CPU ok
-        kappa: Tensor,       # (N, d_kappa)
-        x_flat: Tensor,      # (Ny, 2)     spatiotemporal coordinates
-        gamma_star: Tensor,  # (N, M)      offline EM responsibilities
-        trainers: list,      # M frozen PODTrainer / FourierNeuralPODTrainer
-        val_s: Tensor = None,      # (N_val, Ny)      optional val snapshots
-        val_u0: Tensor = None,     # (N_val, Nx)      optional val inputs
-        val_kappa: Tensor = None,  # (N_val, d_kappa)
+        s: Tensor,
+        u0: Tensor,
+        kappa: Tensor,
+        x_flat: Tensor,
+        gamma_star: Tensor,
+        trainers: list,
+        val_s: Tensor = None,
+        val_u0: Tensor = None,
+        val_kappa: Tensor = None,
     ) -> dict[str, list[float]]:
         device = next(self.model.parameters()).device
         stride = self.cfg.sensor_stride
@@ -244,17 +218,12 @@ class TEMPOOnlineTrainer:
     @torch.no_grad()
     def predict(
         self,
-        u0_new: Tensor,    # (N, Nx)
-        kappa_new: Tensor, # (N, d_kappa)
-        x_flat: Tensor,    # (Ny, 2)
+        u0_new: Tensor,
+        kappa_new: Tensor,
+        x_flat: Tensor,
         trainers: list,
     ) -> tuple[Tensor, Tensor]:
-        """Predict trajectories and gating weights for new inputs.
-
-        Returns:
-            s_hat: (N, Ny)
-            w:     (N, M) gating weights
-        """
+        """Returns (s_hat (N, Ny), w (N, M)) for new inputs."""
         device = next(self.model.parameters()).device
         x_dev = x_flat.to(device)
 
@@ -277,16 +246,7 @@ def build_tempo_online(
     Nx: int,
     cfg: TEMPOOnlineConfig,
 ) -> tuple[TEMPOOnline, TEMPOOnlineTrainer]:
-    """Construct TEMPOOnline and trainer from frozen regime trainers.
-
-    Args:
-        trainers: M frozen PODTrainer / FourierNeuralPODTrainer
-        d_kappa:  physical parameter dimension
-        Nx:       number of spatial grid points
-        cfg:      online config
-    Returns:
-        (model, trainer)
-    """
+    """Construct TEMPOOnline and trainer from frozen regime trainers."""
     M = len(trainers)
     m_sensors = math.ceil(Nx / cfg.sensor_stride)
     P_list = [_num_modes(t) for t in trainers]

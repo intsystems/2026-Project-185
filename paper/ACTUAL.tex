@@ -973,6 +973,8 @@ NeuralPOD-DeepONet~\textit{(ours)}
   & 10000 & 0.030 & 0.028 & 0.032 & \underline{0.034} & \\
 \midrule
 \multicolumn{7}{l}{\textit{Joint training (all Re)}} \\[2pt]
+DeepONet~\cite{Lu2019}
+  & all & ${>}1$ & ${>}1$ & ${>}1$ & ${>}1$ & 0.135 \\
 POD-DeepONet~\cite{Lu2022}
   & all & 0.092 & 0.132 & 0.141 & 0.145 & \textbf{0.005} \\
 FNO~\cite{Li2021}
@@ -1202,7 +1204,7 @@ Table~\ref{tab:kappa_abl} reports the effect of replacing $\kappa$ with zero or 
  & NPOD ($M{=}3$) & POD ($M{=}3$) & NPOD ($M{=}5$) & POD ($M{=}5$) \\
 \midrule
 $\kappa = 0$ & $+0.006$ ($+1\%$) & $+0.127$ ($+37\%$) & $+0.334$ ($+27\%$) & $+0.618$ ($+219\%$) \\
-$\kappa$ predicted from $u_0$ & \textemdash & $+0.024$ ($+7\%$) & \multicolumn{2}{c}{not predictable} \\
+$\kappa$ predicted from $u_0$ & $+0.004$ ($+1\%$) & $+0.024$ ($+7\%$) & \multicolumn{2}{c}{not predictable} \\
 \bottomrule
 \end{tabular}
 \end{table}

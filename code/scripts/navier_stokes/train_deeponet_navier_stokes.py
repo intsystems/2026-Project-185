@@ -152,12 +152,13 @@ def main():
     train_idx = np.concatenate(train_idx)
     test_idx  = np.concatenate(test_idx)
 
-    s_train = torch.from_numpy(s_np[train_idx].astype(np.float32)).to(DEVICE)
-    s_test = torch.from_numpy(s_np[test_idx].astype(np.float32)).to(DEVICE)
-    u0_train = torch.from_numpy(u0_np[train_idx].astype(np.float32)).to(DEVICE)
-    u0_test = torch.from_numpy(u0_np[test_idx].astype(np.float32)).to(DEVICE)
+    # s stays on CPU (too large for MPS buffer); batches moved to device per step
+    s_train = torch.from_numpy(s_np[train_idx].astype(np.float32))
+    s_test  = torch.from_numpy(s_np[test_idx].astype(np.float32))
+    u0_train    = torch.from_numpy(u0_np[train_idx].astype(np.float32)).to(DEVICE)
+    u0_test     = torch.from_numpy(u0_np[test_idx].astype(np.float32)).to(DEVICE)
     kappa_train = torch.from_numpy(kappa_np[train_idx].astype(np.float32)).reshape(-1, 1).to(DEVICE)
-    kappa_test = torch.from_numpy(kappa_np[test_idx].astype(np.float32)).reshape(-1, 1).to(DEVICE)
+    kappa_test  = torch.from_numpy(kappa_np[test_idx].astype(np.float32)).reshape(-1, 1).to(DEVICE)
 
     N_train, N_test = len(train_idx), len(test_idx)
     m = u0_np.shape[1]  # Nxy * 2 (two velocity components)
@@ -188,8 +189,8 @@ def main():
         model.train()
         idx_b = np.random.choice(N_train, min(args.batch_size, N_train), replace=False)
         u0_b = u0_train[idx_b]
-        k_b = kappa_train[idx_b]
-        s_b = s_train[idx_b]
+        k_b  = kappa_train[idx_b]
+        s_b  = s_train[idx_b].to(DEVICE)
 
         pred = model(u0_b, k_b, xyt)
         loss = F.mse_loss(pred, s_b)
@@ -205,14 +206,23 @@ def main():
 
     # ========== EVALUATION ==========
     model.eval()
+    pred_test_list = []
     with torch.no_grad():
-        pred_test = model(u0_test, kappa_test, xyt).cpu().numpy()
-    err_test = rel_l2(s_test.cpu().numpy(), pred_test)
+        for i in range(0, N_test, args.batch_size):
+            p = model(u0_test[i:i+args.batch_size], kappa_test[i:i+args.batch_size], xyt).cpu()
+            pred_test_list.append(p)
+    pred_test = torch.cat(pred_test_list).numpy()
+    err_test = rel_l2(s_test.numpy(), pred_test)
 
     idx_sample = np.random.choice(N_train, min(2000, N_train), replace=False)
+    pred_train_list = []
     with torch.no_grad():
-        pred_train = model(u0_train[idx_sample], kappa_train[idx_sample], xyt).cpu().numpy()
-    err_train = rel_l2(s_train[idx_sample].cpu().numpy(), pred_train)
+        for i in range(0, len(idx_sample), args.batch_size):
+            ib = idx_sample[i:i+args.batch_size]
+            p = model(u0_train[ib], kappa_train[ib], xyt).cpu()
+            pred_train_list.append(p)
+    pred_train = torch.cat(pred_train_list).numpy()
+    err_train = rel_l2(s_train[idx_sample].numpy(), pred_train)
 
     print(f"Train | mean={err_train.mean():.4f}  median={np.median(err_train):.4f}  std={err_train.std():.4f}")
     print(f"Test  | mean={err_test.mean():.4f}  median={np.median(err_test):.4f}  std={err_test.std():.4f}  p95={np.percentile(err_test, 95):.4f}")
@@ -248,13 +258,17 @@ def main():
         if not os.path.exists(fpath):
             continue
         s_re_all, u0_re_all, k_re_all, _, _, _, _ = load_ns_stacked([(re_eval, fpath)], n_samples=args.n_samples)
-        s_re = torch.from_numpy(s_re_all[args.n_samples - args.n_test_per_re:].astype(np.float32)).to(DEVICE)
+        s_re_cpu = torch.from_numpy(s_re_all[args.n_samples - args.n_test_per_re:].astype(np.float32))
         u0_re = torch.from_numpy(u0_re_all[args.n_samples - args.n_test_per_re:].astype(np.float32)).to(DEVICE)
-        k_re = torch.full((len(u0_re), 1), float(re_eval), dtype=torch.float32, device=DEVICE)
+        k_re  = torch.full((len(u0_re), 1), float(re_eval), dtype=torch.float32, device=DEVICE)
 
+        pred_re_list = []
         with torch.no_grad():
-            pred_re = model(u0_re, k_re, xyt).cpu().numpy()
-        err_re = rel_l2(s_re.cpu().numpy(), pred_re)
+            for i in range(0, len(u0_re), args.batch_size):
+                p = model(u0_re[i:i+args.batch_size], k_re[i:i+args.batch_size], xyt).cpu()
+                pred_re_list.append(p)
+        pred_re = torch.cat(pred_re_list).numpy()
+        err_re = rel_l2(s_re_cpu.numpy(), pred_re)
         cross_re_metrics[re_eval] = {
             "mean": float(err_re.mean()),
             "median": float(np.median(err_re)),

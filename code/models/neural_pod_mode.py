@@ -7,18 +7,7 @@ import torch.nn as nn
 
 def _mlp(in_dim: int, out_dim: int, hidden_dim: int, n_layers: int,
           act: type[nn.Module] = nn.Tanh) -> nn.Sequential:
-    """Build fully connected network with specified depth and width.
-
-    Args:
-        in_dim: input dimension
-        out_dim: output dimension
-        hidden_dim: hidden layer width
-        n_layers: total layers (input + hidden + output)
-        act: activation function
-
-    Returns:
-        Sequential model
-    """
+    """Fully connected network with uniform hidden width."""
     layers: list[nn.Module] = [nn.Linear(in_dim, hidden_dim), act()]
     for _ in range(n_layers - 1):
         layers += [nn.Linear(hidden_dim, hidden_dim), act()]
@@ -29,25 +18,14 @@ def _mlp(in_dim: int, out_dim: int, hidden_dim: int, n_layers: int,
 
 
 class MeanNet(nn.Module):
-    """Mean field parameterized by spatial coordinates and parameters.
-
-    Predicts scalar mean at each spatial point and parameter value.
-    """
+    """Parameter-dependent mean field: (x, kappa) -> scalar at each grid point."""
 
     def __init__(self, d_x: int, d_kappa: int, hidden_dim: int = 64, n_layers: int = 2) -> None:
         super().__init__()
         self.net = _mlp(d_x + d_kappa, 1, hidden_dim, n_layers, act=nn.Tanh)
 
     def forward(self, x: torch.Tensor, kappa: torch.Tensor) -> torch.Tensor:
-        """Forward pass computing parameter-dependent mean.
-
-        Args:
-            x: (Ny, d_x) spatial grid points
-            kappa: (N, d_kappa) parameter values
-
-        Returns:
-            (N, Ny) mean values
-        """
+        """Returns (N, Ny) mean values."""
         N, Ny = kappa.shape[0], x.shape[0]
         assert x.dim() == 2, f"x must be 2D, got {x.shape}"
         assert kappa.dim() == 2, f"kappa must be 2D, got {kappa.shape}"
@@ -62,11 +40,7 @@ class MeanNet(nn.Module):
 
 
 class NeuralPODMode(nn.Module):
-    """K-rank mode: spatial and temporal-parameter networks.
-
-    Combines parameter-independent spatial basis with temporal/parameter
-    coefficients via K-dimensional factorization.
-    """
+    """K-rank separable mode: spatial basis combined with temporal/parameter coefficients."""
 
     def __init__(self, d_x: int, d_kappa: int, K: int = 8, hidden_dim: int = 64) -> None:
         super().__init__()
@@ -74,16 +48,7 @@ class NeuralPODMode(nn.Module):
         self.basis_net = _mlp(d_x, K, hidden_dim, n_layers=2, act=nn.Tanh)
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, kappa: torch.Tensor) -> torch.Tensor:
-        """Forward pass computing K-rank mode.
-
-        Args:
-            x: (Ny, d_x) spatial grid points
-            t: (N,) time values
-            kappa: (N, d_kappa) parameter values
-
-        Returns:
-            (N, Ny) mode predictions via K-rank decomposition
-        """
+        """Returns (N, Ny) via K-rank outer product."""
         N, Ny = kappa.shape[0], x.shape[0]
         assert x.dim() == 2, f"x must be 2D, got {x.shape}"
         assert t.dim() == 1, f"t must be 1D, got {t.shape}"
@@ -100,12 +65,7 @@ class NeuralPODMode(nn.Module):
 
 
 class SpatialFourierNN(nn.Module):
-    """Spatial basis via Random Fourier Features.
-
-    Supports multi-scale frequencies: if `scales` is given, num_frequencies
-    are split evenly across scales, capturing both global and local structure.
-    If `scales` is None, falls back to a single scale.
-    """
+    """Spatial basis via Random Fourier Features; multi-scale if `scales` is given."""
 
     def __init__(self, d_x: int = 1, hidden_dim: int = 128,
                  num_frequencies: int = 16, scale: float = 10.0,
@@ -129,14 +89,7 @@ class SpatialFourierNN(nn.Module):
         self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass with Fourier feature encoding.
-
-        Args:
-            x: (Ny, d_x) spatial grid points
-
-        Returns:
-            (Ny,) spatial basis values
-        """
+        """Returns (Ny,) basis values."""
         x_proj = 2 * math.pi * x @ self.B.to(x.device).T
         feats = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], dim=-1)
         return self.net(feats).squeeze(-1)
@@ -150,14 +103,7 @@ class SpatialPODNet(nn.Module):
         self.net = _mlp(d_x, 1, hidden_dim, n_layers, act=nn.Tanh)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass.
-
-        Args:
-            x: (Ny, d_x) spatial grid points
-
-        Returns:
-            (Ny,) spatial basis values
-        """
+        """Returns (Ny,) basis values."""
         return self.net(x).squeeze(-1)
 
 
@@ -169,23 +115,13 @@ class TemporalPODNet(nn.Module):
         self.net = _mlp(1, 1, hidden_dim, n_layers, act=nn.Tanh)
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
-        """Forward pass.
-
-        Args:
-            t: (N,) time values
-
-        Returns:
-            (N,) temporal coefficient values
-        """
+        """Returns (N,) temporal coefficients."""
         t_inp = t.unsqueeze(-1)
         return self.net(t_inp).squeeze(-1)
 
 
 class ClassicalPODMode(nn.Module):
-    """Separable mode: outer product of spatial and temporal bases.
-
-    Mode(x, t) = Phi(x) * Psi(t), parameter-independent.
-    """
+    """Separable mode: Mode(x, t) = Phi(x) * Psi(t), parameter-independent."""
 
     def __init__(self, d_x: int, hidden_dim: int = 64, n_layers: int = 2) -> None:
         super().__init__()
@@ -193,22 +129,14 @@ class ClassicalPODMode(nn.Module):
         self.temporal_net = TemporalPODNet(hidden_dim, n_layers)
 
     def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """Forward pass computing separable mode.
-
-        Args:
-            x: (Ny, d_x) spatial grid points
-            t: (N,) time values
-
-        Returns:
-            (N, Ny) mode values via outer product
-        """
+        """Returns (N, Ny) via outer product of spatial and temporal bases."""
         phi = self.spatial_net(x)
         psi = self.temporal_net(t)
         return torch.outer(psi, phi)
 
 
 class FourierPODMode(nn.Module):
-    """Fourier-based mode with learnable temporal coefficients."""
+    """Fourier spatial basis with per-trajectory learnable amplitude coefficients."""
 
     def __init__(self, d_x: int, M: int, hidden_dim: int = 128,
                  num_frequencies: int = 16, scale: float = 10.0,
