@@ -125,7 +125,6 @@ def main():
     REGIME_COLORS = [plt.cm.tab10(i) for i in range(10)]
     regime_colors = REGIME_COLORS[:args.M]
 
-    # --- Data loading ---
     entries = []
     for beta in args.beta_values:
         fpath = _data_path(beta, args.data_dir)
@@ -144,7 +143,7 @@ def main():
     x_np_1d = xy_np[::Ny, 0]
     y_np_1d = xy_np[:Ny, 1]
 
-    x_flat = torch.tensor(xy_np, dtype=torch.float32)   # (Nxy, 2) — stays CPU for EM
+    x_flat = torch.tensor(xy_np, dtype=torch.float32)   # (Nxy, 2) - stays CPU for EM
     x_dev  = x_flat.to(DEVICE)
 
     s     = torch.from_numpy(s_np);              del s_np
@@ -153,7 +152,6 @@ def main():
 
     print(f"s={s.shape}, a={a.shape}, kappa={kappa.shape}")
 
-    # --- Phase 1: TEMPO EM ---
     print("=== Phase 1: TEMPO EM ===")
 
     if args.basis_type == "pod":
@@ -225,7 +223,6 @@ def main():
         plt.savefig(os.path.join(RUN_DIR, "em_convergence.png"), dpi=150, bbox_inches="tight")
         plt.close()
 
-    # --- Phase 2: Online gated operator ---
     print("=== Phase 2: Online gated operator ===")
 
     s_train     = s[train_idx];         s_test     = s[test_idx]
@@ -287,7 +284,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Evaluation ---
     s_pred, w_pred = online_trainer.predict(
         u0_new=a_test, kappa_new=kappa_test,
         x_flat=x_dev, trainers=trainer.trainers,
@@ -373,7 +369,6 @@ def main():
         os.path.join(RUN_DIR, "cross_beta.png"),
     )
 
-    # --- Metrics ---
     n_params = sum(p.numel() for p in model_online.parameters())
     n_params_basis = 0
     if args.basis_type == "fourier":
@@ -399,7 +394,6 @@ def main():
     metrics["phase1_log"] = trainer.history_phase1
     metrics["phase2_log"] = history
 
-    # --- Checkpoint ---
     torch.save({
         "model_online": model_online.state_dict(),
         "cfg":          cfg,

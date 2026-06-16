@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train POD-DeepONet on 2D Darcy Flow — specialist (single beta) or joint (multiple beta).
+"""Train POD-DeepONet on 2D Darcy Flow - specialist (single beta) or joint (multiple beta).
 
 Usage:
   Specialist: python train_pod_darcy.py --beta_values 1.0
@@ -104,7 +104,6 @@ def main():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    # --- Data loading ---
     entries = []
     for beta in args.beta_values:
         fpath = _data_path(beta, args.data_dir)
@@ -153,7 +152,6 @@ def main():
     m       = math.ceil(Nxy / args.sensor_stride)
     print(f"N_train={N_train}  N_test={N_test}  Nx={Nx}  Ny={Ny}  m={m}")
 
-    # --- Phase 1: POD on training data ---
     print("=== Phase 1: POD ===")
     trainer_pod = PODTrainer(PODConfig(max_modes=args.max_modes))
     trainer_pod.train(s_train_dev, x=None, t=None)
@@ -163,7 +161,6 @@ def main():
     sigmas = trainer_pod.basis.coeffs.cpu().numpy().std(axis=0) * np.sqrt(N_train - 1)
     plot_pod_phase1(sigmas, os.path.join(RUN_DIR, "pod_phase1.png"))
 
-    # --- Phase 2: Branch network (always d_kappa=1) ---
     print(f"=== Phase 2: Branch network (d_kappa=1, {'joint' if joint else 'specialist'}) ===")
     mean_dev  = trainer_pod.basis.mean.to(DEVICE)
     modes_dev = trainer_pod.basis.modes.to(DEVICE)
@@ -219,7 +216,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Evaluation helpers ---
     def predict_batch(a_in, kappa_in, batch_size=256):
         branch.eval()
         parts = []
@@ -369,7 +365,6 @@ def main():
     plot_error_dist(err_test, "POD-DeepONet Darcy - test errors",
                     os.path.join(RUN_DIR, "pod_err_dist.png"))
 
-    # --- Checkpoint ---
     torch.save({
         "model":    model.state_dict(),
         "metrics":  metrics,

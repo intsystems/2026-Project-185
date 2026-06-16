@@ -42,10 +42,7 @@ print("  Each file ≈ 1-2 GB\n")
 
 
 def finite_diff_burgers_1d(t, u_flat, dx, nu, Nx):
-    """
-    Simple semi-implicit solver for 1D Navier-Stokes (Burgers-like).
-    u_flat: flattened velocity array
-    """
+    """Semi-implicit 1D Burgers solver. u_flat is a flattened velocity array."""
     u = u_flat.reshape(Nx)
 
     # Periodic boundary conditions

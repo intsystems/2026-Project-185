@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train CNO2d on 2D Darcy Flow — specialist (one beta) or joint (multiple beta).
+"""Train CNO2d on 2D Darcy Flow - specialist (one beta) or joint (multiple beta).
 
 CNO2d treats the spatial domain (x, y) as a 2D grid.
 Darcy data is already square (Nx=Ny=128), so no resize is needed at default size=128.
@@ -7,7 +7,7 @@ Darcy data is already square (Nx=Ny=128), so no resize is needed at default size
 Single --beta_values  → specialist: cross-beta generalization eval, cross_beta.png.
 Multiple --beta_values → joint: per-beta error bar, error_per_beta.png.
 
-Input:  (N, 4, size, size) — [permeability a, log10(beta) norm, x-coord, y-coord]
+Input:  (N, 4, size, size) - [permeability a, log10(beta) norm, x-coord, y-coord]
 Output: (N, 1, size, size)
 
 Setup (run once on server):
@@ -36,7 +36,6 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 from utils.datasets import load_darcy_stacked, DATA_DIR, measure_inference_time
 
-# --- Locate CNO2d_simplified ---
 _CNO_SEARCH = [
     os.environ.get("CNO_PATH", ""),
     str(_PROJECT_ROOT.parent / "CNO" / "CNO2d_simplified"),   # project/CNO/
@@ -62,7 +61,7 @@ _LOG10_BETA_MAX = np.log10(max(_ALL_BETA))   #  2
 
 
 def rel_l2(true, pred):
-    """true, pred: (N, D) — returns (N,) per-sample relative L2."""
+    """true, pred: (N, D) - returns (N,) per-sample relative L2."""
     return np.linalg.norm(true - pred, axis=1) / np.linalg.norm(true, axis=1)
 
 
@@ -83,7 +82,7 @@ def parse_args():
     p.add_argument("--n_samples",        type=int,   default=10000)
     p.add_argument("--n_test_per_beta",  type=int,   default=1000)
     p.add_argument("--data_dir",         type=str,   default=None)
-    # Grid — Darcy is 128x128 by default, no resize needed
+    # Grid - Darcy is 128x128 by default, no resize needed
     p.add_argument("--size",             type=int,   default=128,
                    help="Square grid size (default 128 = native Darcy resolution)")
     # CNO architecture
@@ -195,7 +194,6 @@ def main():
 
     C0, C1, C2 = plt.cm.tab10(0), plt.cm.tab10(1), plt.cm.tab10(2)
 
-    # --- Data loading ---
     entries = []
     for beta in beta_values:
         fpath = _data_path(beta, args.data_dir)
@@ -261,7 +259,6 @@ def main():
             print(f"Data {_data_gb:.1f} GB > {_free_gb*0.45:.1f} GB threshold, using pin_memory")
             _pin = True
 
-    # --- Build model ---
     model = CNO2d(
         in_dim=4,
         out_dim=1,
@@ -282,7 +279,6 @@ def main():
                        batch_size=args.batch_size, shuffle=True,
                        pin_memory=_pin, num_workers=0)
 
-    # --- Training ---
     mode_str = "joint" if is_joint else f"specialist beta={beta_values[0]}"
     print(f"=== Training CNO Darcy | {mode_str} | N_train={N_train} | epochs={args.n_epochs} ===")
     t0 = time.time()
@@ -315,7 +311,6 @@ def main():
 
     print(f"  done: total time {time.time() - t0:.0f}s")
 
-    # --- Training dynamics plot ---
     fig, ax1 = plt.subplots(figsize=(8, 4))
     ax1.semilogy(range(1, len(history_train) + 1), history_train, color=C0, lw=1.5, label="Train L1")
     ax1.set_xlabel("Epoch"); ax1.set_ylabel("L1 loss", color=C0)
@@ -337,7 +332,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Final evaluation ---
     pred_train = predict_batched(model, X_train, DEVICE)
     pred_test  = predict_batched(model, X_test,  DEVICE)
 
@@ -446,7 +440,6 @@ def main():
             plt.savefig(os.path.join(RUN_DIR, "cross_beta.png"), dpi=150, bbox_inches="tight")
             plt.close()
 
-    # --- Reconstruction examples (from test set of first beta) ---
     rng  = np.random.default_rng(args.seed)
     idxs = rng.choice(n_test, size=args.n_viz, replace=False)
 
@@ -483,7 +476,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "cno_reconstruction.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Error distribution ---
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     ax = axes[0]
     ax.hist(err_test, bins=30, color=C0, alpha=0.8, linewidth=0)
@@ -506,7 +498,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "cno_err_dist.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Checkpoint ---
     torch.save({
         "model_state": model.state_dict(),
         "metrics":     metrics,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train NeuralPOD-DeepONet on 2D Darcy Flow — specialist (single beta) or joint (multiple beta).
+"""Train NeuralPOD-DeepONet on 2D Darcy Flow - specialist (single beta) or joint (multiple beta).
 
 Usage:
   Specialist: python train_neural_pod_darcy.py --beta_values 1.0
@@ -102,7 +102,6 @@ def main():
 
     C0, C1 = plt.cm.tab10(0), plt.cm.tab10(1)
 
-    # --- Data loading ---
     entries = []
     for beta in args.beta_values:
         fpath = _data_path(beta, args.data_dir)
@@ -152,7 +151,6 @@ def main():
     x_flat = torch.tensor(xy_np, dtype=torch.float32).to(DEVICE)  # (Nxy, 2)
     print(f"N_train={N_train}  N_test={N_test}  Nxy={Nxy}  m={m}")
 
-    # --- Phase 1: Fourier NeuralPOD on training data ---
     print("=== Phase 1: Fourier NeuralPOD ===")
     w = torch.ones(Nxy, dtype=torch.float32).to(DEVICE) / Nxy
     basis = FourierRegimeBasis(
@@ -192,7 +190,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "npod_phase1.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Phase 2: Branch network (always d_kappa=1) ---
     print(f"=== Phase 2: Branch network (d_kappa=1, {'joint' if joint else 'specialist'}) ===")
     branch = BranchNet(m=m, P=K, hidden_dim=args.hidden_dim,
                        n_layers=args.n_layers, d_kappa=1).to(DEVICE)
@@ -267,7 +264,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Prediction helper ---
     @torch.no_grad()
     def predict_batch(a_in, kappa_in, batch_size=128):
         branch.eval()
@@ -283,7 +279,6 @@ def main():
             parts.append(pred.cpu())
         return torch.cat(parts, dim=0).numpy()
 
-    # --- Evaluation ---
     s_test_np = s_test.numpy()
     pred_test = predict_batch(a_test, kappa_test)
     err_test  = rel_l2(s_test_np, pred_test)
@@ -422,7 +417,6 @@ def main():
     plot_error_dist(err_test, "NeuralPOD-DeepONet Darcy - test errors",
                     os.path.join(RUN_DIR, "npod_err_dist.png"))
 
-    # --- Checkpoint ---
     torch.save({
         "branch":   branch.state_dict(),
         "basis":    basis.state_dict(),

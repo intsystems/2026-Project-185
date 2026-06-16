@@ -113,7 +113,6 @@ def main():
     regime_colors = REGIME_COLORS[:args.M]
     _D2 = plt.cm.Dark2
 
-    # --- Data loading ---
     entries = [
         (nu, os.path.join(args.data_dir, f"1D_Burgers_Sols_Nu{nu}.hdf5"))
         for nu in args.nu_values
@@ -132,7 +131,6 @@ def main():
 
     print(f"s={s.shape}, x={x.shape}, kappa={kappa.shape}")
 
-    # --- Phase 1: TEMPO EM ---
     print("=== Phase 1: TEMPO EM ===")
 
     if args.basis_type == "pod":
@@ -205,7 +203,6 @@ def main():
         plt.savefig(os.path.join(RUN_DIR, "em_convergence.png"), dpi=150, bbox_inches="tight")
         plt.close()
 
-    # --- Phase 2: Online gated operator ---
     print("=== Phase 2: Online gated operator ===")
 
     u0 = s[:, :Nx]
@@ -272,7 +269,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Evaluation ---
     s_pred, w_pred = online_trainer.predict(
         u0_new=u0_test, kappa_new=kappa_test,
         x_flat=x, trainers=trainer.trainers,
@@ -366,7 +362,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "reconstruct.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Metrics ---
     n_params = sum(p.numel() for p in model_online.parameters())
     n_params_basis = 0
     if args.basis_type == "fourier":
@@ -392,7 +387,6 @@ def main():
     metrics["phase1_log"] = trainer.history_phase1
     metrics["phase2_log"] = history
 
-    # --- Checkpoint ---
     torch.save({
         "model_online": model_online.state_dict(),
         "cfg":          cfg,

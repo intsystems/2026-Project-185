@@ -26,15 +26,7 @@ class NeuralPODDeepONetConfig:
 
 
 class NeuralPODDeepONet(nn.Module):
-    """NeuralPOD-DeepONet for time-dependent PDEs.
-
-    Prediction: mean_net(x,t) + branch(u_0) @ Phi(x,t).T
-    where Phi are K spatiotemporal Fourier mode networks from Phase 1.
-
-    Args:
-        basis:  trained FourierRegimeBasis with d_x=2, M=N_traj
-        branch: BranchNet mapping u_0 sensors to K mode coefficients
-    """
+    """NeuralPOD-DeepONet: mean_net(x,t) + branch(u0) @ Phi(x,t).T with K frozen Fourier modes."""
 
     def __init__(self, basis: FourierRegimeBasis, branch: BranchNet) -> None:
         super().__init__()
@@ -48,14 +40,7 @@ class NeuralPODDeepONet(nn.Module):
         return len(self.basis.modes)
 
     def forward(self, u0: Tensor, x_flat: Tensor) -> Tensor:
-        """
-        Args:
-            u0:     (N, m)       — initial conditions at sensor points
-            x_flat: (Nt*Nx, 2)  — (x, t) coordinate pairs
-
-        Returns:
-            (N, Nt*Nx) — predicted spatiotemporal field; reshape to (N, Nt, Nx)
-        """
+        """Returns (N, Nt*Nx) predicted field. u0: (N, m), x_flat: (Nt*Nx, 2)."""
         beta = self.branch(u0)  # (N, K)
         phi = torch.stack([m.phi(x_flat) for m in self.basis.modes], dim=1)  # (Nt*Nx, K)
         mean = self.basis.mean_net(x_flat)  # (Nt*Nx,)
@@ -63,16 +48,7 @@ class NeuralPODDeepONet(nn.Module):
 
 
 class NeuralPODDeepONetTrainer:
-    """Two-stage trainer for NeuralPOD-DeepONet.
-
-    Phase 1 (external): FourierNeuralPODTrainer.train(s_traj, x_flat)
-        s_traj: (N_traj, Nt*Nx) — full spatiotemporal trajectories, flattened
-        x_flat: (Nt*Nx, 2)      — (x, t) coordinate pairs
-        Produces mean_net and modes[k].phi (frozen after Phase 1),
-        and modes[k].lambda_ten (N_traj,) — one coefficient per trajectory.
-
-    Phase 2 (this class): train branch net u_0 -> lambda coefficients.
-    """
+    """Phase 2 trainer: branch net u0 -> lambda coefficients given frozen Fourier basis from Phase 1."""
 
     def __init__(self, model: NeuralPODDeepONet, cfg: NeuralPODDeepONetConfig) -> None:
         self.model = model
@@ -81,17 +57,7 @@ class NeuralPODDeepONetTrainer:
 
     def train(self, u0: Tensor, val_u0: Tensor = None, val_s: Tensor = None,
               x_flat: Tensor = None) -> list[float]:
-        """Train branch net on lambda coefficient regression.
-
-        Args:
-            u0:     (N_traj, Nx)   — input fields at full spatial resolution
-            val_u0: (N_val, Nx)    — validation inputs (optional)
-            val_s:  (N_val, Nxy)   — validation snapshot targets (optional, CPU tensor ok)
-            x_flat: (Nxy, d_x)     — spatial coordinates; required when val data is provided
-
-        Returns:
-            per-epoch train MSE losses on lambda coefficients; val history in self.val_history
-        """
+        """Train branch net on lambda coefficient regression. Returns per-epoch train MSE."""
         basis = self.model.basis
         K = len(basis.modes)
         assert K > 0, "Run FourierNeuralPODTrainer.train(s_traj, x_flat) first."
@@ -150,15 +116,7 @@ class NeuralPODDeepONetTrainer:
 
     @torch.no_grad()
     def predict(self, u0_new: Tensor, x_flat: Tensor) -> Tensor:
-        """Predict full spatiotemporal trajectories for new initial conditions.
-
-        Args:
-            u0_new: (N, Nx)     — initial conditions at full spatial resolution
-            x_flat: (Nt*Nx, 2) — (x, t) coordinate pairs
-
-        Returns:
-            (N, Nt*Nx) — reshape to (N, Nt, Nx) for visualization
-        """
+        """Returns (N, Nt*Nx) predicted trajectories for new initial conditions."""
         device = next(self.model.parameters()).device
         u0_sensors = u0_new[:, ::self.cfg.sensor_stride].to(device)
         x_flat = x_flat.to(device)

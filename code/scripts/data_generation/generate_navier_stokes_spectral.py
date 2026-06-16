@@ -38,7 +38,6 @@ OUTPUT_DIR = pathlib.Path.home() / "data" / "2D" / "Navier_Stokes"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ---------- spectral helpers ----------
 
 def _build_wavenumbers(N):
     k = np.fft.fftfreq(N, d=1.0 / N).astype(np.float64)
@@ -85,10 +84,7 @@ def _nonlinear(omega_hat, kx, ky, k2, mask):
 
 
 def simulate_one(omega0, nu, dt, n_steps_burn, n_steps_save, n_inner, N):
-    """
-    Run NS from initial vorticity omega0.
-    Returns: trajectory (n_steps_save+1, N, N, 2) or None if NaN detected.
-    """
+    """Run NS from initial vorticity omega0. Returns (n_steps_save+1, N, N, 2) or None if NaN."""
     kx, ky, k2 = _build_wavenumbers(N)
     mask = _dealias_mask(N)
     f_hat = _forcing(N)

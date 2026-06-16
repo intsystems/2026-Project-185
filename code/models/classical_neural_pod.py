@@ -47,11 +47,7 @@ class ClassicalNeuralPODConfig:
 
 
 class ClassicalNeuralPODTrainer:
-    """Greedy sequential mode extraction via residual decomposition.
-
-    Extracts parameter-independent modes with spatial network Phi(x) and
-    temporal network Psi(t). Orthogonality maintained through deflation.
-    """
+    """Greedy sequential mode extraction via residual deflation: s = sum_k Phi_k(x) * Psi_k(t)."""
 
     def __init__(self, cfg: ClassicalNeuralPODConfig) -> None:
         self.cfg = cfg
@@ -67,18 +63,7 @@ class ClassicalNeuralPODTrainer:
         kappa: Tensor = None,
         gamma: Tensor = None,
     ) -> TrainHistory:
-        """Extract modes from snapshot matrix via greedy decomposition.
-
-        Args:
-            s: (N, Ny) snapshot matrix
-            x: (Ny, d_x) spatial grid
-            t: (N,) time vector
-            kappa: unused
-            gamma: unused
-
-        Returns:
-            TrainHistory with epoch losses and residual norms
-        """
+        """Extract modes greedily from (N, Ny) snapshot matrix. Returns TrainHistory."""
         N, Ny = s.shape
         d_x = x.shape[1]
         device = s.device

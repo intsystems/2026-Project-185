@@ -7,15 +7,7 @@ from .neural_pod_mode import MeanNet, NeuralPODMode, SpatialFourierNN, FourierPO
 
 
 class RegimeBasis(nn.Module):
-    """Parametric basis: mean network + K-rank mode.
-
-    Args:
-        d_x: spatial coordinate dimension
-        d_kappa: parameter dimension
-        quad_weights: quadrature weights (Ny,)
-        K: rank of factorization
-        hidden_dim: network width
-    """
+    """Parametric basis: MeanNet(x, kappa) + K-rank NeuralPODMode(x, t, kappa)."""
 
     def __init__(
         self,
@@ -48,19 +40,7 @@ class RegimeBasis(nn.Module):
 
 
 class FourierRegimeBasis(nn.Module):
-    """Sequential Fourier basis with learnable temporal coefficients.
-
-    Args:
-        d_x:             spatial dimension
-        M:               number of snapshots (temporal coefficient size)
-        quad_weights:    quadrature weights (Ny,)
-        hidden_dim:      network width
-        num_frequencies: total Fourier feature count
-        scale:           single frequency scale (used when scales is None)
-        scales:          multi-scale list, e.g. [1.0, 3.0, 8.0]; frequencies
-                         are split evenly across scales for richer coverage
-        n_layers:        depth of each phi MLP (default 2 hidden layers)
-    """
+    """Sequential Fourier basis: SpatialFourierNN mean + FourierPODMode list with per-trajectory lambdas."""
 
     def __init__(
         self,
@@ -91,13 +71,7 @@ class FourierRegimeBasis(nn.Module):
         return len(self.modes)
 
     def forward(self, x: torch.Tensor, t=None, kappa=None) -> torch.Tensor:
-        """Reconstruct snapshots: mean plus all modes.
-
-        Args:
-            x: (Ny, d_x) spatial grid
-        Returns:
-            (N, Ny) full reconstruction
-        """
+        """Returns (N, Ny) reconstruction: mean_net(x) + sum of mode outer products."""
         N = self.modes[0].lambda_ten.shape[0] if self.modes else 1
         out = self.mean_net(x).unsqueeze(0).expand(N, -1)  # (N, Ny)
         for mode in self.modes:

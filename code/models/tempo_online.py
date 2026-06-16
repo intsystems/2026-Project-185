@@ -46,13 +46,7 @@ class GatingNet(nn.Module):
         self.branch = BranchNet(m_sensors, M, hidden_dim, n_layers, d_kappa=d_kappa)
 
     def forward(self, u0: Tensor, kappa: Tensor) -> Tensor:
-        """
-        Args:
-            u0:    (N, m_sensors)
-            kappa: (N, d_kappa)
-        Returns:
-            (N, M) simplex weights
-        """
+        """Returns (N, M) simplex weights. u0: (N, m_sensors), kappa: (N, d_kappa)."""
         return F.softmax(self.branch(u0, kappa), dim=-1)
 
 

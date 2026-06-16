@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""Train FNO on 1D Burgers — specialist (one nu) or joint (multiple nu).
+"""Train FNO on 1D Burgers - specialist (one nu) or joint (multiple nu).
 
 Single --nu_values  → specialist mode: cross-nu generalization eval, cross_nu.png.
 Multiple --nu_values → joint mode: per-nu error bar, error_per_nu.png.
 
 FNO 2D: (u0, nu, x, t) -> s(x, t) for all (x, t) simultaneously.
-Input:  (N, 4, Nx, Nt)  — channels: [u0 broadcast, log10(nu) norm, x-coord, t-coord]
+Input:  (N, 4, Nx, Nt)  - channels: [u0 broadcast, log10(nu) norm, x-coord, t-coord]
 Output: (N, 1, Nx, Nt)
 """
 import argparse
@@ -38,7 +38,7 @@ _LOG10_NU_MAX = np.log10(max(_ALL_NU))   #  0
 
 
 def rel_l2(true, pred):
-    """true, pred: (N, D) — returns (N,) per-sample relative L2."""
+    """true, pred: (N, D) - returns (N,) per-sample relative L2."""
     return np.linalg.norm(true - pred, axis=1) / np.linalg.norm(true, axis=1)
 
 
@@ -100,7 +100,7 @@ def predict_batched(model, X_tensor, device, batch_size=128):
     with torch.no_grad():
         for i in range(0, len(X_tensor), batch_size):
             out = model(X_tensor[i:i + batch_size].to(device))  # (B, 1, Nx, Nt)
-            # transpose to (B, Nt, Nx) then flatten to (B, Nt*Nx) — matches s convention
+            # transpose to (B, Nt, Nx) then flatten to (B, Nt*Nx) - matches s convention
             parts.append(out[:, 0].permute(0, 2, 1).reshape(len(out), -1).cpu())
     return torch.cat(parts, dim=0).numpy()
 
@@ -134,7 +134,6 @@ def main():
 
     C0, C1, C2 = plt.cm.tab10(0), plt.cm.tab10(1), plt.cm.tab10(2)
 
-    # --- Data loading ---
     data_dir  = pathlib.Path(args.data_dir)
     local_dir = _PROJECT_ROOT / "data"
 
@@ -164,7 +163,7 @@ def main():
     kappa_test  = kappa[test_idx]    # (N_test,)
     del s, kappa
 
-    u0_train = s_train[:, :Nx]   # (N_train, Nx)  — t=0 slice
+    u0_train = s_train[:, :Nx]   # (N_train, Nx)  - t=0 slice
     u0_test  = s_test[:,  :Nx]   # (N_test,  Nx)
 
     # FNO input / target tensors
@@ -181,7 +180,7 @@ def main():
     N_test  = len(test_idx)
     print(f"FNO input: {tuple(X_train.shape)}  output: {tuple(Y_train.shape)}")
 
-    # Pre-load to GPU if data fits — eliminates per-batch CPU→GPU transfers
+    # Pre-load to GPU if data fits - eliminates per-batch CPU→GPU transfers
     _pin = False
     if DEVICE == "cuda":
         _data_gb = (X_train.numel() + Y_train.numel() + X_test.numel()) * 4 / 1e9
@@ -195,7 +194,6 @@ def main():
             print(f"Data {_data_gb:.1f} GB > {_free_gb*0.45:.1f} GB threshold, using pin_memory")
             _pin = True
 
-    # --- Build model ---
     model = FNO(
         n_modes=(args.n_modes_x, args.n_modes_t),
         in_channels=4,
@@ -215,7 +213,6 @@ def main():
                        batch_size=args.batch_size, shuffle=True,
                        pin_memory=_pin, num_workers=0)
 
-    # --- Training ---
     mode_str = "joint" if is_joint else f"specialist nu={nu_values[0]}"
     print(f"=== Training FNO | {mode_str} | N_train={N_train} | epochs={args.n_epochs} ===")
     t0 = time.time()
@@ -246,7 +243,6 @@ def main():
 
     print(f"  done: total time {time.time() - t0:.0f}s")
 
-    # --- Training dynamics plot ---
     fig, ax1 = plt.subplots(figsize=(8, 4))
     ax1.semilogy(range(1, len(history_train) + 1), history_train, color=C0, lw=1.5, label="Train MSE")
     ax1.set_xlabel("Epoch"); ax1.set_ylabel("MSE", color=C0)
@@ -268,7 +264,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Final evaluation ---
     pred_train = predict_batched(model, X_train, DEVICE)
     pred_test  = predict_batched(model, X_test,  DEVICE)
 
@@ -279,7 +274,6 @@ def main():
     print(f"Test  | mean={err_test.mean():.4f}  median={np.median(err_test):.4f}  std={err_test.std():.4f}  p95={np.percentile(err_test, 95):.4f}")
 
     if is_joint:
-        # --- Joint metrics: per-nu breakdown ---
         metrics: dict = {
             "run_name":       RUN_NAME,
             "n_params":       n_params,
@@ -316,7 +310,6 @@ def main():
         plt.close()
 
     else:
-        # --- Specialist metrics + cross-nu generalization ---
         TRAIN_NU = nu_values[0]
         metrics: dict = {
             "run_name":     RUN_NAME,
@@ -385,7 +378,6 @@ def main():
             plt.savefig(os.path.join(RUN_DIR, "cross_nu.png"), dpi=150, bbox_inches="tight")
             plt.close()
 
-    # --- Reconstruction examples (from test set of first nu) ---
     rng  = np.random.default_rng(args.seed)
     idxs = rng.choice(n_test, size=args.n_viz, replace=False)
 
@@ -421,7 +413,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "fno_reconstruction.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Error distribution (test set) ---
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     ax = axes[0]
     ax.hist(err_test, bins=30, color=C0, alpha=0.8, linewidth=0)
@@ -445,7 +436,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "fno_err_dist.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Checkpoint ---
     torch.save({
         "model_state": model.state_dict(),
         "metrics":     metrics,

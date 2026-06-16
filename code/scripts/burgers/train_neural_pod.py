@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train NeuralPOD-DeepONet on 1D Burgers — specialist (single nu) or joint (multiple nu).
+"""Train NeuralPOD-DeepONet on 1D Burgers - specialist (single nu) or joint (multiple nu).
 
 Usage:
   Specialist: python train_neural_pod.py --nu_values 0.001
@@ -95,7 +95,6 @@ def main():
 
     C0, C1, C2 = plt.cm.tab10(0), plt.cm.tab10(1), plt.cm.tab10(2)
 
-    # --- Data loading ---
     data_dir = pathlib.Path(args.data_dir)
     entries = []
     for nu in args.nu_values:
@@ -153,7 +152,6 @@ def main():
     x_flat = torch.stack([xx_g.flatten(), tt_g.flatten()], dim=1).to(DEVICE)  # (Nt*Nx, 2)
     print(f"s_train: {tuple(s_train.shape)}, x_flat: {tuple(x_flat.shape)}")
 
-    # --- Phase 1: Fourier NeuralPOD on training data ---
     print("=== Phase 1: Fourier NeuralPOD ===")
     w = torch.ones(Nt * Nx, dtype=torch.float32).to(DEVICE) / (Nt * Nx)
     basis = FourierRegimeBasis(
@@ -193,7 +191,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "npod_phase1.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Phase 2: Branch network (always d_kappa=1) ---
     print(f"=== Phase 2: Branch network (d_kappa=1, {'joint' if joint else 'specialist'}) ===")
     branch = BranchNet(m=m, P=K, hidden_dim=args.hidden_dim,
                        n_layers=args.n_layers, d_kappa=1).to(DEVICE)
@@ -268,7 +265,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Prediction helper ---
     @torch.no_grad()
     def predict_batch(u0_in, kappa_in, batch_size=128):
         branch.eval()
@@ -284,7 +280,6 @@ def main():
             parts.append(pred.cpu())
         return torch.cat(parts, dim=0).numpy()
 
-    # --- Evaluation ---
     s_test_np  = s_test.numpy()
     pred_test  = predict_batch(u0_test, kappa_test)
     err_test   = rel_l2(s_test_np, pred_test)
@@ -407,7 +402,6 @@ def main():
         plt.savefig(os.path.join(RUN_DIR, "error_per_nu.png"), dpi=150, bbox_inches="tight")
         plt.close()
 
-    # --- Reconstruction examples ---
     rng = np.random.default_rng(args.seed)
 
     if not joint:
@@ -507,7 +501,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "npod_err_dist.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Checkpoint ---
     torch.save({
         "branch":   branch.state_dict(),
         "basis":    basis.state_dict(),

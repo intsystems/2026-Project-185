@@ -124,7 +124,6 @@ def main():
     REGIME_COLORS = [plt.cm.tab10(i) for i in range(10)]
     regime_colors = REGIME_COLORS[:args.M]
 
-    # --- Data loading ---
     entries = []
     for re in args.re_values:
         fpath = _data_path(re, args.data_dir)
@@ -148,7 +147,7 @@ def main():
     _c1 = np.array([0.0, 1.0], dtype=np.float32)
     _T, _X, _Y, _C = np.meshgrid(_t1, _x1, _y1, _c1, indexing='ij')  # each (Nt, Nx, Ny, 2)
     x_full = np.stack([_X.ravel(), _Y.ravel(), _T.ravel(), _C.ravel()], axis=1)  # (Nt*Nxy*2, 4)
-    x_flat = torch.tensor(x_full, dtype=torch.float32)  # (Nt*Nxy*2, 4) — stays CPU for EM
+    x_flat = torch.tensor(x_full, dtype=torch.float32)  # (Nt*Nxy*2, 4) - stays CPU for EM
     x_dev  = x_flat.to(DEVICE)
 
     s     = torch.from_numpy(s_np);  del s_np
@@ -168,7 +167,6 @@ def main():
 
     print(f"s={s.shape}, u0={u0.shape}, kappa={kappa.shape}")
 
-    # --- Phase 1: TEMPO EM ---
     print("=== Phase 1: TEMPO EM ===")
 
     if args.basis_type == "pod":
@@ -227,7 +225,6 @@ def main():
         plt.savefig(os.path.join(RUN_DIR, "em_convergence.png"), dpi=150, bbox_inches="tight")
         plt.close()
 
-    # --- Phase 2: Online gated operator ---
     print("=== Phase 2: Online gated operator ===")
 
     # Normalise s so Phase 2 MSE loss is O(1); rel-L2 is scale-invariant.
@@ -304,7 +301,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Evaluation ---
     s_pred, w_pred = online_trainer.predict(
         u0_new=u0_test, kappa_new=kappa_test,
         x_flat=x_dev, trainers=trainer.trainers,
@@ -356,7 +352,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "TEMPO_phase2.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Visualization: Error distribution ---
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.hist(rel_l2, bins=40, color="steelblue", alpha=0.7, edgecolor="black")
     ax.axvline(rel_l2.mean(), color="red", linestyle="--", linewidth=2, label=f"Mean: {rel_l2.mean():.4f}")
@@ -370,7 +365,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "error_dist.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Visualization: Sample reconstructions (2D spatial fields) ---
     n_viz = min(args.n_viz, len(test_idx))
     n_timesteps_show = 3
     time_indices = np.linspace(0, Nt - 1, n_timesteps_show, dtype=int)
@@ -430,7 +424,6 @@ def main():
         plt.savefig(os.path.join(RUN_DIR, f"reconstruction_sample{sample_idx}.png"), dpi=100, bbox_inches="tight")
         plt.close()
 
-    # --- 3D Visualization: Velocity magnitude surface plots ---
     from mpl_toolkits.mplot3d import Axes3D
 
     for sample_idx in range(n_viz):

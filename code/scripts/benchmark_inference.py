@@ -49,7 +49,6 @@ N_REP    = 20
 QUICK    = False
 
 
-# --- helpers ------------------------------------------------------------------
 
 def load_results():
     if RESULTS_FILE.exists():
@@ -82,7 +81,6 @@ def _count_branch_weights(sd, prefix="branch.net."):
     return sum(1 for k in sd if k.startswith(prefix) and k.endswith(".weight"))
 
 
-# --- POD-DeepONet -------------------------------------------------------------
 
 def bench_pod_deeponet(ckpt_path, n_samples, key, results, dry_run):
     if not ckpt_path.exists():
@@ -125,7 +123,6 @@ def bench_pod_deeponet(ckpt_path, n_samples, key, results, dry_run):
         print(f"  {key}  FAILED: {e}")
 
 
-# --- NeuralPOD-DeepONet -------------------------------------------------------
 
 def bench_npod_deeponet(ckpt_path, n_samples, Ny, d_x, key, results, dry_run):
     if not ckpt_path.exists():
@@ -200,7 +197,6 @@ def bench_npod_deeponet(ckpt_path, n_samples, Ny, d_x, key, results, dry_run):
         print(f"  {key}  FAILED: {e}")
 
 
-# --- vanilla DeepONet ---------------------------------------------------------
 
 def _mlp(in_dim, out_dim, hidden_dim, n_layers):
     layers = [nn.Linear(in_dim, hidden_dim), nn.Tanh()]
@@ -212,7 +208,7 @@ def _mlp(in_dim, out_dim, hidden_dim, n_layers):
 
 def bench_deeponet(n_samples, m, Ny, trunk_coord_dim, n_components,
                    key, results, dry_run, hidden_dim=256, n_layers=4):
-    """Random-weight DeepONet — architecture matches training scripts exactly.
+    """Random-weight DeepONet - architecture matches training scripts exactly.
 
     n_components=1: Burgers/Darcy (scalar output per query point)
     n_components=2: NS (two velocity components per query point)
@@ -266,7 +262,6 @@ def bench_deeponet(n_samples, m, Ny, trunk_coord_dim, n_components,
         print(f"  {key}  FAILED: {e}")
 
 
-# --- FNO ----------------------------------------------------------------------
 
 def bench_fno(ckpt_path, x_dummy, n_samples, key, results, dry_run,
               in_channels, out_channels, n_modes_tuple, batch_size=64):
@@ -313,7 +308,6 @@ def bench_fno(ckpt_path, x_dummy, n_samples, key, results, dry_run,
         print(f"  {key}  FAILED: {e}")
 
 
-# --- CNO ----------------------------------------------------------------------
 
 def bench_cno(ckpt_path, x_dummy, n_samples, key, results, dry_run,
               in_dim, out_dim, size, batch_size=64):
@@ -359,7 +353,6 @@ def bench_cno(ckpt_path, x_dummy, n_samples, key, results, dry_run,
         print(f"  {key}  FAILED: {e}")
 
 
-# --- TEMPO --------------------------------------------------------------------
 
 def bench_tempo(ckpt_path, n_samples, Ny, key, results, dry_run):
     if not ckpt_path.exists():
@@ -411,7 +404,6 @@ def bench_tempo(ckpt_path, n_samples, Ny, key, results, dry_run):
         print(f"  {key}  FAILED: {e}")
 
 
-# --- benchmark suites ---------------------------------------------------------
 
 def benchmark_burgers(results, dry_run=False):
     print("\n" + "=" * 65)
@@ -509,7 +501,6 @@ def benchmark_ns(results, dry_run=False):
                    key="ns/deeponet", results=results, dry_run=dry_run)
 
 
-# --- summary / main -----------------------------------------------------------
 
 def print_summary(results):
     print("\n" + "=" * 70)

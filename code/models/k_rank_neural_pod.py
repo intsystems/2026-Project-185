@@ -41,10 +41,7 @@ class NeuralPODConfig:
 
 
 class WeightedNeuralPODTrainer:
-    """Joint mean and K-rank mode training with basis penalty.
-
-    Loss: weighted sum of MSE and basis orthonormality constraint.
-    """
+    """Joint mean and K-rank mode training with basis orthonormality penalty."""
 
     def __init__(self, basis: RegimeBasis, cfg: NeuralPODConfig) -> None:
         self.basis = basis
@@ -62,18 +59,7 @@ class WeightedNeuralPODTrainer:
         kappa: Tensor,
         gamma: Tensor,
     ) -> TrainHistory:
-        """Train mean and modes with basis orthonormality penalty.
-
-        Args:
-            s: (N, Ny) snapshot matrix
-            x: (Ny, d_x) spatial grid
-            t: (N,) time vector
-            kappa: (N, d_kappa) parameters
-            gamma: unused
-
-        Returns:
-            TrainHistory with weighted losses
-        """
+        """Train mean and modes jointly with basis orthonormality penalty. Returns TrainHistory."""
         print(f"\nWeighted Joint Neural POD Training")
         print(f"Data: s={tuple(s.shape)}, x={tuple(x.shape)}")
         print(f"Config: K={self.cfg.K}, n_epochs={self.cfg.n_epochs}, batch_size={self.cfg.batch_size}")

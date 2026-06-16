@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train POD-DeepONet on 1D Navier-Stokes — specialist or joint across Reynolds.
+"""Train POD-DeepONet on 1D Navier-Stokes - specialist or joint across Reynolds.
 
 Usage:
   Specialist: python train_pod_navier_stokes_1d.py --re_values 100
@@ -99,7 +99,6 @@ def main():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    # --- Data loading ---
     entries = []
     for re in args.re_values:
         fpath = _data_path(re, args.data_dir)
@@ -144,14 +143,12 @@ def main():
     m = math.ceil(Nx / args.sensor_stride)
     print(f"N_train={N_train}  N_test={N_test}  Nx={Nx}  Nt={Nt}  m={m}")
 
-    # --- Phase 1: POD on training data ---
     print("=== Phase 1: POD ===")
     trainer_pod = PODTrainer(PODConfig(max_modes=args.max_modes))
     trainer_pod.train(s_train_dev, x=None, t=None)
     P = trainer_pod.basis.num_modes
     print(f"P={P} modes")
 
-    # --- Phase 2: Branch network ---
     print(f"=== Phase 2: Branch network (d_kappa=1, {'joint' if joint else 'specialist'}) ===")
     mean_dev = trainer_pod.basis.mean.to(DEVICE)
     modes_dev = trainer_pod.basis.modes.to(DEVICE)
@@ -209,7 +206,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Evaluation helpers ---
     def predict_batch(u0_in, kappa_in, batch_size=256):
         branch.eval()
         parts = []
@@ -307,7 +303,6 @@ def main():
 
         metrics["cross_re"] = cross_re_metrics
 
-    # --- Visualizations ---
     # Error distribution
     plot_error_dist(err_test, "POD-DeepONet 1D Navier-Stokes - test errors",
                     os.path.join(RUN_DIR, "error_dist.png"))
@@ -343,7 +338,6 @@ def main():
         plt.savefig(os.path.join(RUN_DIR, "reconstruction.png"), dpi=150, bbox_inches="tight")
         plt.close()
 
-    # --- Checkpoint ---
     torch.save({
         "model": model.state_dict(),
         "metrics": metrics,

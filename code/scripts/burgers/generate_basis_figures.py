@@ -28,9 +28,7 @@ _ROOT = pathlib.Path(__file__).resolve().parents[2]
 C0, C1 = plt.cm.tab10(0), plt.cm.tab10(1)
 
 
-# ---------------------------------------------------------------------------
 # CLI
-# ---------------------------------------------------------------------------
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -52,9 +50,7 @@ def parse_args():
     return p.parse_args()
 
 
-# ---------------------------------------------------------------------------
 # Data
-# ---------------------------------------------------------------------------
 
 def _data_path(nu):
     local  = _ROOT / "data" / f"Burgers_Nu{nu}.hdf5"
@@ -75,9 +71,7 @@ def load_data(nu, n_train):
     return raw, x_np, t_np[:Nt], N, Nt, Nx
 
 
-# ---------------------------------------------------------------------------
 # Reconstruction helpers
-# ---------------------------------------------------------------------------
 
 @torch.no_grad()
 def pod_reconstruct(trainer_pod, idx):
@@ -99,9 +93,7 @@ def fnpod_reconstruct(trainer_fnpod, idx, x_flat, device):
     return rec.numpy()                                 # (n, Ny)
 
 
-# ---------------------------------------------------------------------------
 # Figures
-# ---------------------------------------------------------------------------
 
 def plot_spectrum(trainer_pod, trainer_fnpod, save_path):
     coeffs_np = trainer_pod.basis.coeffs.cpu().numpy()
@@ -224,9 +216,7 @@ def plot_reconstruction(s_raw, trainer_pod, trainer_fnpod, x_flat, device,
     print(f"saved {save_path}")
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 def main():
     args = parse_args()
@@ -243,7 +233,6 @@ def main():
         device = torch.device("cpu")
     print(f"device={device}")
 
-    # --- Data ---
     raw, x_np, t_np, N, Nt, Nx = load_data(args.nu, args.n_train)
     Ny = Nt * Nx
 
@@ -254,12 +243,10 @@ def main():
 
     s_traj = torch.tensor(raw.reshape(N, Ny), dtype=torch.float32)
 
-    # --- Phase 1: POD ---
     print("=== POD ===")
     trainer_pod = PODTrainer(PODConfig(max_modes=args.max_modes))
     trainer_pod.train(s_traj.to(device), x=None, t=None)
 
-    # --- Phase 1: FNPOD ---
     print("=== Fourier NeuralPOD ===")
     w     = torch.ones(Ny, dtype=torch.float32, device=device) / Ny
     basis = FourierRegimeBasis(
@@ -277,7 +264,6 @@ def main():
     trainer_fnpod = FourierNeuralPODTrainer(basis, cfg_fnpod)
     trainer_fnpod.train(s_traj, x_flat.to(device), t=None)
 
-    # --- Figures ---
     tag = f"nu{args.nu}"
     plot_spectrum(
         trainer_pod, trainer_fnpod,

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Train CNO2d on 2D incompressible Navier-Stokes — specialist (one Re) or joint (multiple Re).
+"""Train CNO2d on 2D incompressible Navier-Stokes - specialist (one Re) or joint (multiple Re).
 
-Input:  (N, 2, 64, 64) — [u0, v0]  (no Re channel — faithful to original CNO)
-Output: (N, 2*Nt, 64, 64) — full velocity trajectory
+Input:  (N, 2, 64, 64) - [u0, v0]  (no Re channel - faithful to original CNO)
+Output: (N, 2*Nt, 64, 64) - full velocity trajectory
 
 Setup (run once on server):
     git clone https://github.com/camlab-ethz/ConvolutionalNeuralOperator ~/CNO
@@ -75,7 +75,7 @@ def build_target(s_np, Nt, Nx, Ny):
 
 
 def pred_to_flat(pred_np, Nt, Nx, Ny):
-    """(N, 2*Nt, Nx, Ny) → (N, Nt*Nx*Ny*2) — same flat layout as s_np."""
+    """(N, 2*Nt, Nx, Ny) → (N, Nt*Nx*Ny*2) - same flat layout as s_np."""
     N = len(pred_np)
     g = pred_np.reshape(N, 2, Nt, Nx, Ny)   # (N, 2, Nt, Nx, Ny)
     g = g.transpose(0, 2, 3, 4, 1)           # (N, Nt, Nx, Ny, 2)
@@ -152,7 +152,6 @@ def main():
 
     C0, C1 = plt.cm.tab10(0), plt.cm.tab10(1)
 
-    # --- Data ---
     entries = []
     for re in args.re_values:
         fpath = _data_path(re, args.data_dir)
@@ -206,7 +205,6 @@ def main():
             print(f"Data {_data_gb:.1f} GB > threshold, using pin_memory")
             _pin = True
 
-    # --- Model ---
     model = CNO2d(
         in_dim=2,
         out_dim=out_ch,
@@ -227,7 +225,6 @@ def main():
                        batch_size=args.batch_size, shuffle=True,
                        pin_memory=_pin, num_workers=0)
 
-    # --- Training ---
     mode_str = "joint" if is_joint else f"specialist Re={args.re_values[0]}"
     print(f"=== Training CNO | {mode_str} | N_train={N_train} | epochs={args.n_epochs} ===")
     t0 = time.time()
@@ -279,7 +276,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Final evaluation ---
     pred_test_flat = pred_to_flat(predict_batched(model, X_test, DEVICE), Nt, Nx, Ny)
     err_test  = rel_l2(s_test_flat, pred_test_flat)
 

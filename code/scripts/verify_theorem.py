@@ -43,20 +43,10 @@ sys.path.insert(0, str(_ROOT / "code"))
 from utils.datasets import load_stacked
 
 
-# ---------------------------------------------------------------------------
 # Core computation
-# ---------------------------------------------------------------------------
 
 def _pod_error_curve(S_centered: np.ndarray, weights: np.ndarray, K_max: int) -> np.ndarray:
-    """
-    Computes weighted POD reconstruction error curve.
-
-    Returns err: (K_max+1,) where err[k] = weighted reconstruction error
-    when using k modes. Units: same as weights (normalised to sum=1 internally,
-    then scaled back by weights.sum()).
-
-    err[k] = weights.sum() * (weighted_total_var - Σ_{j=1}^k σ_j²)
-    """
+    """err[k] = weights.sum() * (weighted_total_var - sum(σ_j² for j<=k)); shape (K_max+1,)."""
     W_sum = weights.sum()
     w = weights / W_sum                              # normalise
     Sw = (S_centered * np.sqrt(w[:, None])).astype(np.float32)
@@ -84,11 +74,7 @@ def global_pod_errors(S: np.ndarray, K_max: int) -> np.ndarray:
 
 
 def tempo_pod_errors(S: np.ndarray, gamma: np.ndarray, K_max: int) -> np.ndarray:
-    """
-    ε_TEMPO(K) = Σ_m Σ_i γ_im ||(I - P_mK)(s_i - μ_m)||².
-
-    gamma: (N, M) non-negative, rows sum to 1 (soft) or rows are one-hot (hard).
-    """
+    """ε_TEMPO(K) = Σ_m Σ_i γ_im ||(I - P_mK)(s_i - μ_m)||². gamma: (N, M) soft or hard assignments."""
     N, M = gamma.shape
     err_total = np.zeros(K_max + 1)
     for m in range(M):
@@ -115,9 +101,7 @@ def kmeans_gamma(S: np.ndarray, M: int, n_pca: int = 20, seed: int = 0) -> np.nd
     return gamma
 
 
-# ---------------------------------------------------------------------------
 # Plotting
-# ---------------------------------------------------------------------------
 
 PALETTE = ["#000000", "#2166ac", "#d6604d", "#4dac26", "#762a83", "#e08214"]
 
@@ -133,7 +117,6 @@ def make_figure(
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
     plt.rcParams.update({"font.size": 11})
 
-    # ---- Left: normalised error curves (log scale) ----
     ax = axes[0]
     ax.semilogy(Ks, err_global / total_g, "--", color=PALETTE[0],
                 lw=2.2, label="Global POD ($M{=}1$)")
@@ -156,7 +139,6 @@ def make_figure(
     ax.grid(True, which="both", ls=":", alpha=0.4)
     ax.spines[["top", "right"]].set_visible(False)
 
-    # ---- Right: relative gain (%) ----
     ax2 = axes[1]
     for i, (M, err) in enumerate(sorted(tempo_errors.items())):
         if M == 1:
@@ -177,7 +159,7 @@ def make_figure(
     ax2.spines[["top", "right"]].set_visible(False)
 
     plt.suptitle(
-        "1D Burgers' equation — $k$-means regime assignments",
+        "1D Burgers' equation - $k$-means regime assignments",
         fontsize=12, y=1.01,
     )
     plt.tight_layout()
@@ -186,9 +168,7 @@ def make_figure(
     print(f"Saved → {out_path}")
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__,
@@ -209,7 +189,6 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # --- Load data ---
     entries = [
         (nu, os.path.join(args.data_dir, f"1D_Burgers_Sols_Nu{nu}.hdf5"))
         for nu in args.nu_values
@@ -222,11 +201,9 @@ def main():
 
     K_max = min(args.K_max, N - 1, S.shape[1] - 1)
 
-    # --- Global POD ---
     print("Computing global POD error curve...")
     err_g = global_pod_errors(S, K_max)
 
-    # --- TEMPO for each M via k-means ---
     tempo_errors = {}
     for M in args.M_list:
         print(f"Computing TEMPO M={M} (k-means)...")
@@ -239,7 +216,6 @@ def main():
         gain_at10 = float((gap / (err_g + 1e-30) * 100)[min(10, K_max)])
         print(f"  M={M}: gain@K=10: {gain_at10:+.1f}%   violations: {viol}/{K_max}")
 
-    # --- Print summary table ---
     print(f"\n{'K':>4}", end="")
     print(f"  {'ε_global':>10}", end="")
     for M in sorted(tempo_errors):
@@ -255,7 +231,6 @@ def main():
             print(f"  {tempo_errors[M][k]:>10.2f} ({gain:+.1f}%)", end="")
         print()
 
-    # --- Figure ---
     make_figure(err_g, tempo_errors, args.out)
 
 

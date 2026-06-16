@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train NeuralPOD-DeepONet on 2D incompressible Navier-Stokes — specialist or joint.
+"""Train NeuralPOD-DeepONet on 2D incompressible Navier-Stokes - specialist or joint.
 
 Usage:
   Specialist: python train_neural_pod_navier_stokes.py --re_values 100
@@ -100,7 +100,6 @@ def main():
 
     C0, C1 = plt.cm.tab10(0), plt.cm.tab10(1)
 
-    # --- Data loading ---
     entries = []
     for re in args.re_values:
         fpath = _data_path(re, args.data_dir)
@@ -154,7 +153,6 @@ def main():
     Nfull = Nt * Nxy * 2  # = 172032 for 64x64 grid, 21 timesteps, 2 components
     print(f"N_train={N_train}  N_test={N_test}  Nxy={Nxy}  Nfull={Nfull}  m={m}")
 
-    # --- Phase 1: Fourier NeuralPOD on training data ---
     print("=== Phase 1: Fourier NeuralPOD ===")
     w = torch.ones(Nfull, dtype=torch.float32).to(DEVICE) / Nfull
     basis = FourierRegimeBasis(
@@ -196,7 +194,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "npod_phase1.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Phase 2: Branch network (always d_kappa=1) ---
     print(f"=== Phase 2: Branch network (d_kappa=1, {'joint' if joint else 'specialist'}) ===")
     branch = BranchNet(m=m, P=K, hidden_dim=args.hidden_dim,
                        n_layers=args.n_layers, d_kappa=1).to(DEVICE)
@@ -271,7 +268,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Prediction helper ---
     @torch.no_grad()
     def predict_batch(u0_in, kappa_in, batch_size=128):
         branch.eval()
@@ -287,7 +283,6 @@ def main():
             parts.append(pred.cpu())
         return torch.cat(parts, dim=0).numpy()
 
-    # --- Evaluation ---
     s_test_np = s_test.numpy()
     pred_test = predict_batch(u0_test, kappa_test)
     err_test = rel_l2(s_test_np, pred_test)
@@ -372,7 +367,6 @@ def main():
 
         metrics["cross_re"] = cross_re_metrics
 
-    # --- Visualization: Error distribution ---
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.hist(err_test, bins=40, color="steelblue", alpha=0.7, edgecolor="black")
     ax.axvline(err_test.mean(), color="red", linestyle="--", linewidth=2, label=f"Mean: {err_test.mean():.4f}")
@@ -386,7 +380,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "error_dist.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Visualization: Sample reconstructions (2D spatial fields) ---
     n_viz = min(args.n_viz, len(test_idx))
     n_timesteps_show = 3
     time_indices = np.linspace(0, Nt - 1, n_timesteps_show, dtype=int)
@@ -446,7 +439,6 @@ def main():
         plt.savefig(os.path.join(RUN_DIR, f"reconstruction_sample{sample_idx}.png"), dpi=100, bbox_inches="tight")
         plt.close()
 
-    # --- 3D Visualization: Velocity magnitude surface plots ---
     from mpl_toolkits.mplot3d import Axes3D
 
     for sample_idx in range(n_viz):
@@ -492,7 +484,6 @@ def main():
 
     print(f"Generated {n_viz} reconstruction visualization(s) + {n_viz} 3D visualization(s)")
 
-    # --- Checkpoint ---
     torch.save({
         "branch": branch.state_dict(),
         "basis": basis.state_dict(),

@@ -43,9 +43,7 @@ from models.pod_deeponet import BranchNet
 from models.pod import PODTrainer
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def rel_l2_vec(pred: torch.Tensor, true: torch.Tensor) -> np.ndarray:
     """Per-sample relative L2. Both tensors: (N, D)."""
@@ -53,13 +51,7 @@ def rel_l2_vec(pred: torch.Tensor, true: torch.Tensor) -> np.ndarray:
 
 
 def _load_model(run_dir: str, device: str):
-    """Load TEMPOOnline and frozen sub-trainers from a run directory.
-
-    Returns:
-        model        - TEMPOOnline on device (weights loaded)
-        sub_trainers - list of M PODTrainer / FourierNeuralPODTrainer (CPU)
-        cfg_online   - TEMPOOnlineConfig
-    """
+    """Load TEMPOOnline and frozen sub-trainers from run_dir. Returns (model, sub_trainers, cfg_online)."""
     trainer_path = os.path.join(run_dir, "trainer.pt")
     model_path   = os.path.join(run_dir, "model_online.pt")
 
@@ -73,7 +65,7 @@ def _load_model(run_dir: str, device: str):
 
     P_list = [_num_modes(t) for t in sub_trainers]
 
-    # Infer architecture from state dict — cfg_online.n_layers can be stale.
+    # Infer architecture from state dict; cfg_online.n_layers can be stale.
     # _mlp(n_layers) builds n_layers+1 Linear layers, so n_layers = n_weight_keys - 1.
     w0 = sd["gating.branch.net.0.weight"]   # (hidden_dim, m_sensors + d_kappa)
     hidden_dim = w0.shape[0]
@@ -95,11 +87,7 @@ def _load_model(run_dir: str, device: str):
 
 
 def _compute_bases(sub_trainers, x_flat, device):
-    """Evaluate frozen basis (mean, modes) for each regime on the given grid.
-
-    For POD: x_flat is ignored (mean/modes are precomputed numpy arrays).
-    For NeuralPOD: x_flat (Ny, d_x) is required to evaluate basis networks.
-    """
+    """Evaluate frozen basis (mean, modes) per regime. x_flat required for NeuralPOD, ignored for POD."""
     try:
         from models.fourier_neural_pod import FourierNeuralPODTrainer
         has_npod = True
@@ -153,11 +141,9 @@ def _report(variant_label, err_vec, kappa_np, param_label, gating_w=None):
         print(f"    {param_label}={v:.4g}: {err_vec[mask].mean():.4f}{w_str}")
 
 
-# ---------------------------------------------------------------------------
 # Benchmark-specific data loaders
 # Returns: (s_test, u0_test, kappa_test, kappa_train, x_flat, param_label)
 #   x_flat - (Ny, d_x) coordinate grid used during training, or None for NS POD
-# ---------------------------------------------------------------------------
 
 def _load_burgers(data_dir, nu_values, n_samples, n_test_per_nu):
     from utils.datasets import load_stacked
@@ -245,7 +231,7 @@ def _load_ns(data_dir, re_values, n_samples, n_test_per_re):
     kappa = torch.from_numpy(kappa_np[:, None])
 
     # NS training script normalises s; POD bases are scaled the same way,
-    # so rel-L2 is invariant — but we must replicate the normalisation for
+    # so rel-L2 is invariant, but we must replicate the normalisation for
     # predictions to match the target scale.
     s_scale = float(s[train_idx].std())
     print(f"  NS s_scale={s_scale:.4f}")
@@ -256,9 +242,7 @@ def _load_ns(data_dir, re_values, n_samples, n_test_per_re):
     return s[test_idx], u0[test_idx], kappa[test_idx], kappa[train_idx], None, "Re"
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -290,7 +274,6 @@ def main():
     device = args.device
     print(f"device={device}  benchmark={args.benchmark}  run_dir={args.run_dir}")
 
-    # --- Load model weights + sub-trainers (bases computed after data loading) ---
     model, sub_trainers, cfg_online = _load_model(args.run_dir, device)
     M      = model.M
     stride = cfg_online.sensor_stride
@@ -300,7 +283,6 @@ def main():
     print(f"M={M}  basis={basis_types[0]}  sensor_stride={stride}  "
           f"hidden_dim={cfg_online.hidden_dim}  n_layers={n_linears - 1}")
 
-    # --- Load data + build coordinate grid ---
     if args.benchmark == "burgers":
         s_test, u0_test, kappa_test, kappa_train, x_flat, param_label = _load_burgers(
             args.burgers_data_dir, args.nu_values, args.n_samples_burgers, args.n_test_burgers)
@@ -313,10 +295,8 @@ def main():
 
     print(f"test: s={s_test.shape}  u0={u0_test.shape}  kappa={kappa_test.shape}")
 
-    # --- Evaluate basis on coordinate grid (supports POD and NeuralPOD) ---
     means, modes = _compute_bases(sub_trainers, x_flat, device)
 
-    # --- Prepare sensor inputs ---
     u0_sensors = u0_test[:, ::stride].to(device)
     s_true     = s_test.to(device)
 
@@ -333,7 +313,6 @@ def main():
     kappa_train_mean = float(kappa_train[:, 0].mean())
     print(f"kappa_train_mean={kappa_train_mean:.4g}")
 
-    # --- Three kappa variants ---
     kappa_real = kappa_test.to(device)
     kappa_zero = torch.zeros_like(kappa_real)
     kappa_mean = torch.full_like(kappa_real, kappa_train_mean)
@@ -348,7 +327,6 @@ def main():
     err_zero   = rel_l2_vec(pred_zero, s_true_cpu)
     err_mean   = rel_l2_vec(pred_mean, s_true_cpu)
 
-    # --- Results ---
     print(f"\n=== Kappa ablation: {args.benchmark.upper()} ===")
     print(f"  N_test={len(s_test)}, M={M}, param={param_label}\n")
 

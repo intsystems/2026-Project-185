@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train POD-DeepONet on 1D Burgers — specialist (single nu) or joint (multiple nu).
+"""Train POD-DeepONet on 1D Burgers - specialist (single nu) or joint (multiple nu).
 
 Usage:
   Specialist: python train_pod.py --nu_values 0.001
@@ -81,7 +81,6 @@ def main():
 
     C0, C1, C2 = plt.cm.tab10(0), plt.cm.tab10(1), plt.cm.tab10(2)
 
-    # --- Data loading ---
     data_dir = pathlib.Path(args.data_dir)
     entries = []
     for nu in args.nu_values:
@@ -105,7 +104,7 @@ def main():
     ])
 
     s       = torch.from_numpy(s_np)
-    u0_all  = torch.from_numpy(s_np[:, :Nx])      # (N, Nx) — initial condition
+    u0_all  = torch.from_numpy(s_np[:, :Nx])      # (N, Nx) - initial condition
     kappa   = torch.from_numpy(kappa_np[:, None])  # (N, 1)
 
     s_train     = s[train_idx];       s_test     = s[test_idx]
@@ -123,7 +122,6 @@ def main():
     m = len(range(0, Nx, args.sensor_stride))
     print(f"N_train={N_train}  N_test={N_test}  Nx={Nx}  Nt={Nt}  m={m}")
 
-    # --- Phase 1: POD on training data ---
     print("=== Phase 1: POD ===")
     trainer_pod = PODTrainer(PODConfig(max_modes=args.max_modes))
     trainer_pod.train(s_train_dev, x=None, t=None)
@@ -149,7 +147,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "pod_phase1.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Phase 2: Branch network (always d_kappa=1) ---
     print(f"=== Phase 2: Branch network (d_kappa=1, {'joint' if joint else 'specialist'}) ===")
     mean_dev  = trainer_pod.basis.mean.to(DEVICE)
     modes_dev = trainer_pod.basis.modes.to(DEVICE)
@@ -205,7 +202,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "training_dynamics.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Evaluation helpers ---
     def predict_batch(u0_in, kappa_in, batch_size=256):
         branch.eval()
         parts = []
@@ -336,7 +332,6 @@ def main():
         plt.savefig(os.path.join(RUN_DIR, "error_per_nu.png"), dpi=150, bbox_inches="tight")
         plt.close()
 
-    # --- Reconstruction examples ---
     rng = np.random.default_rng(args.seed)
     t_plot = t_np[:Nt]
 
@@ -437,7 +432,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "pod_err_dist.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Checkpoint ---
     torch.save({
         "model":    model.state_dict(),
         "metrics":  metrics,

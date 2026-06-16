@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Train vanilla DeepONet (Lu 2019) on 2D Darcy Flow — pure PyTorch.
+"""Train vanilla DeepONet (Lu 2019) on 2D Darcy Flow - pure PyTorch.
 
 Simple, clean implementation without DeepXDE complications.
 
@@ -123,7 +123,6 @@ def main():
     DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print(f"device={DEVICE}  epochs={n_epochs}  run={RUN_NAME}")
 
-    # ========== DATA ==========
     entries = [(b, _data_path(b, args.data_dir)) for b in args.beta_values if os.path.exists(_data_path(b, args.data_dir))]
     if not entries:
         raise RuntimeError("No data files found")
@@ -150,7 +149,6 @@ def main():
 
     print(f"N_train={N_train}  N_test={N_test}  Nx={Nx}  Ny={Ny}  m={m}  Nxy={Nxy}")
 
-    # ========== MODEL ==========
     d = args.hidden_dim
     branch = BranchNet(m, d, args.hidden_dim, args.n_layers).to(DEVICE)
     trunk = TrunkNet(d, args.hidden_dim, args.n_layers).to(DEVICE)
@@ -158,7 +156,6 @@ def main():
 
     print(f"Params: {sum(p.numel() for p in model.parameters()):,}")
 
-    # ========== TRAINING ==========
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
     for epoch in range(n_epochs):
@@ -180,7 +177,6 @@ def main():
 
     print(f"Done: final loss={loss.item():.4e}")
 
-    # ========== EVALUATION ==========
     model.eval()
     with torch.no_grad():
         pred_test = model(a_test[:, ::effective_stride], kappa_test, xy).cpu().numpy()
@@ -194,7 +190,6 @@ def main():
     print(f"Train | mean={err_train.mean():.4f}  median={np.median(err_train):.4f}  std={err_train.std():.4f}")
     print(f"Test  | mean={err_test.mean():.4f}  median={np.median(err_test):.4f}  std={err_test.std():.4f}  p95={np.percentile(err_test, 95):.4f}")
 
-    # ========== METRICS ==========
     metrics = {
         "run_name": RUN_NAME,
         "n_params": sum(p.numel() for p in model.parameters()),
@@ -243,7 +238,6 @@ def main():
     if not joint:
         plot_cross_param_bar(cross_beta_metrics, args.beta_values[0], "beta", "DeepONet - cross-beta", os.path.join(RUN_DIR, "cross_beta.png"))
 
-    # ========== VISUALIZATION ==========
     plot_error_dist(err_test, "DeepONet", os.path.join(RUN_DIR, "err_dist.png"))
 
     if N_test >= args.n_viz:

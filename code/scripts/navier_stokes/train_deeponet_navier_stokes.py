@@ -101,12 +101,7 @@ class DeepONet(nn.Module):
         self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, u0, re, xyt):
-        """
-        u0: (N, m*2) - flattened initial velocity
-        re: (N, 1) - Reynolds number
-        xyt: (Nxyt, 3) - spatial-temporal coordinates
-        Output: (N, Nxyt*2) - velocity field trajectory (u and v components)
-        """
+        """Returns (N, Nxyt*2) velocity field. u0: (N, m*2), re: (N,1), xyt: (Nxyt,3)."""
         b = self.branch(u0, re)  # (N, d)
         t = self.trunk(xyt)  # (Nxyt, 2*d)
         # Reshape trunk to (Nxyt, 2, d)
@@ -134,7 +129,6 @@ def main():
     DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print(f"device={DEVICE}  epochs={n_epochs}  run={RUN_NAME}")
 
-    # ========== DATA ==========
     entries = [(re, _data_path(re, args.data_dir)) for re in args.re_values if os.path.exists(_data_path(re, args.data_dir))]
     if not entries:
         raise RuntimeError("No data files found")
@@ -173,7 +167,6 @@ def main():
     xyt = np.stack([xg.flatten(), yg.flatten(), tg.flatten()], axis=1).astype(np.float32)
     xyt = torch.from_numpy(xyt).to(DEVICE)
 
-    # ========== MODEL ==========
     d = args.hidden_dim
     branch = BranchNet(m, d, args.hidden_dim, args.n_layers).to(DEVICE)
     trunk = TrunkNet(d, args.hidden_dim, args.n_layers).to(DEVICE)
@@ -182,7 +175,6 @@ def main():
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Params: {n_params:,}")
 
-    # ========== TRAINING ==========
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
     for epoch in range(n_epochs):
@@ -204,7 +196,6 @@ def main():
 
     print(f"Done: final loss={loss.item():.4e}")
 
-    # ========== EVALUATION ==========
     model.eval()
     pred_test_list = []
     with torch.no_grad():
@@ -227,7 +218,6 @@ def main():
     print(f"Train | mean={err_train.mean():.4f}  median={np.median(err_train):.4f}  std={err_train.std():.4f}")
     print(f"Test  | mean={err_test.mean():.4f}  median={np.median(err_test):.4f}  std={err_test.std():.4f}  p95={np.percentile(err_test, 95):.4f}")
 
-    # ========== METRICS ==========
     metrics = {
         "run_name": RUN_NAME,
         "n_params": n_params,
@@ -279,7 +269,6 @@ def main():
 
     metrics["cross_re"] = cross_re_metrics
 
-    # --- Visualization: Error distribution ---
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.hist(err_test, bins=40, color="steelblue", alpha=0.7, edgecolor="black")
     ax.axvline(err_test.mean(), color="red", linestyle="--", linewidth=2, label=f"Mean: {err_test.mean():.4f}")
@@ -293,7 +282,6 @@ def main():
     plt.savefig(os.path.join(RUN_DIR, "error_dist.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # --- Visualization: Sample reconstructions (2D spatial fields) ---
     s_test_np = s_test.cpu().numpy()
     n_viz = min(args.n_viz, len(test_idx))
     n_timesteps_show = 3
@@ -354,7 +342,6 @@ def main():
         plt.savefig(os.path.join(RUN_DIR, f"reconstruction_sample{sample_idx}.png"), dpi=100, bbox_inches="tight")
         plt.close()
 
-    # --- 3D Visualization: Velocity magnitude surface plots ---
     from mpl_toolkits.mplot3d import Axes3D
 
     for sample_idx in range(n_viz):

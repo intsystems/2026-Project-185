@@ -21,14 +21,7 @@ C0, C1, C2     = plt.cm.tab10(0), plt.cm.tab10(1), plt.cm.tab10(2)
 
 
 def plot_train_history(trainer) -> plt.Figure:
-    """Visualize loss and residual evolution during training.
-
-    Args:
-        trainer: any trainer with history attribute
-
-    Returns:
-        matplotlib figure with 4 subplots
-    """
+    """Visualize loss and residual evolution for a trainer with a history attribute."""
     h = trainer.history
     cfg = trainer.cfg
     n_modes = len(h.mode_losses)
@@ -36,7 +29,6 @@ def plot_train_history(trainer) -> plt.Figure:
     fig = plt.figure(figsize=(14, 8))
     gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.4, wspace=0.35)
 
-    # Mean network loss
     ax0 = fig.add_subplot(gs[0, 0])
     ax0.plot(h.mean_loss, color=COLOR_MEAN, lw=2)
     ax0.set_title("Mean network loss", fontweight="bold")
@@ -44,7 +36,6 @@ def plot_train_history(trainer) -> plt.Figure:
     ax0.set_ylabel("MSE")
     ax0.grid(True, ls="--", alpha=0.4)
 
-    # Mode losses
     ax1 = fig.add_subplot(gs[0, 1])
     for p, losses in enumerate(h.mode_losses):
         ax1.plot(losses, color=PALETTE[p % len(PALETTE)], lw=1.5, label=f"mode {p + 1}")
@@ -55,7 +46,6 @@ def plot_train_history(trainer) -> plt.Figure:
         ax1.legend(fontsize=8, loc="upper right")
     ax1.grid(True, ls="--", alpha=0.4)
 
-    # Residual MSE per mode
     ax2 = fig.add_subplot(gs[1, 0])
     if h.residual_norms:
         idx = list(range(1, len(h.residual_norms) + 1))
@@ -66,7 +56,6 @@ def plot_train_history(trainer) -> plt.Figure:
         ax2.set_ylabel("MSE")
     ax2.grid(True, ls="--", alpha=0.4)
 
-    # Residual drop per mode
     ax3 = fig.add_subplot(gs[1, 1])
     if h.residual_norms:
         norms = h.residual_norms
@@ -107,18 +96,7 @@ def plot_training_loss(trainer) -> plt.Figure:
 
 def plot_space_time_heatmaps(obj, s_true: torch.Tensor,
                               x: torch.Tensor, t: torch.Tensor, title: str = "NeuralPOD") -> plt.Figure:
-    """Plot truth, prediction, and error in space-time.
-
-    Args:
-        obj: basis, trainer, or predictor object
-        s_true: (N, Ny) snapshot matrix
-        x: (Ny, d_x) spatial grid
-        t: (N,) time vector
-        title: plot title
-
-    Returns:
-        matplotlib figure with 3 subplots
-    """
+    """Plot truth, prediction, and error in space-time for a basis/trainer/predictor object."""
     with torch.no_grad():
         if hasattr(obj, 'predict'):
             s_pred = obj.predict(x, t)
@@ -305,19 +283,7 @@ def plot_umap_regimes(
     save_path: str,
     seed: int = 0,
 ) -> None:
-    """3-panel UMAP: regime assignment, param coloring, POD coefficient space.
-
-    Args:
-        alpha:        (N, P) POD coefficients
-        mu:           (M, P) regime centroids
-        Sigma:        (M, P, P) regime covariances
-        hard_labels:  (N,) integer regime assignments
-        param_vals:   (N,) scalar parameter per sample (nu, beta, ...)
-        regime_colors: list of M colors
-        param_label:  axis/legend label for the parameter
-        title:        figure suptitle
-        save_path:    output file path
-    """
+    """3-panel UMAP: regime assignment, param coloring, and POD coefficient space."""
     from umap import UMAP
     from matplotlib.patches import Ellipse
 

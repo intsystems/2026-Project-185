@@ -27,9 +27,7 @@ from models.pod_deeponet import BranchNet
 from utils.datasets import load_stacked
 
 
-# ---------------------------------------------------------------------------
-# Data loading — matches training script exactly
-# ---------------------------------------------------------------------------
+# Data loading - matches training script exactly
 
 def load_burgers(data_dir, nu_values, n_samples, n_test_per_nu):
     entries = [(nu, os.path.join(data_dir, f"1D_Burgers_Sols_Nu{nu}.hdf5"))
@@ -59,9 +57,7 @@ def load_burgers(data_dir, nu_values, n_samples, n_test_per_nu):
             x_flat, Nx)
 
 
-# ---------------------------------------------------------------------------
 # Model loading
-# ---------------------------------------------------------------------------
 
 def load_model(run_dir, device):
     from models.fourier_neural_pod import FourierNeuralPODTrainer
@@ -115,9 +111,7 @@ def compute_bases(sub_trainers, x_flat, device):
     return means_list, modes_list
 
 
-# ---------------------------------------------------------------------------
 # kappa classifier: predicts nu class from u0
-# ---------------------------------------------------------------------------
 
 def build_classifier(in_dim, n_classes, hidden=256):
     return nn.Sequential(
@@ -136,11 +130,7 @@ def _labels_to_idx(nu_labels, nu_values):
 
 
 def train_classifier(u0_train, nu_labels_train, nu_values, device, epochs=30, batch=256):
-    """Train MLP to classify nu from u0.
-
-    nu_labels_train: (N, 1) float tensor of nu values — converted to class indices.
-    Returns: trained model (on device).
-    """
+    """Train MLP to classify nu from u0. nu_labels_train is (N, 1) float tensor of nu values."""
     y_train = _labels_to_idx(nu_labels_train, nu_values)
 
     in_dim    = u0_train.shape[1]
@@ -200,9 +190,7 @@ def eval_classifier(clf, u0_test, nu_labels_test, nu_values, device):
     return kappa_pred, acc
 
 
-# ---------------------------------------------------------------------------
 # Inference
-# ---------------------------------------------------------------------------
 
 @torch.no_grad()
 def predict_batched(model, u0_sensors, kappa, means, modes, batch=256):
@@ -226,9 +214,7 @@ def report(label, err_vec, kappa_np, nu_values):
         print(f"    nu={v}: {err_vec[mask].mean():.4f}")
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -249,12 +235,10 @@ def main():
     device = args.device
     print(f"device={device}  run_dir={args.run_dir}")
 
-    # --- Load model ---
     model, sub_trainers, stride, M = load_model(args.run_dir, device)
     basis_type = type(sub_trainers[0]).__name__
     print(f"M={M}  basis={basis_type}  stride={stride}")
 
-    # --- Load data ---
     (s_train, u0_train, kappa_train,
      s_test,  u0_test,  kappa_test,
      x_flat, Nx) = load_burgers(
@@ -264,10 +248,8 @@ def main():
 
     nu_np = kappa_test[:, 0].numpy()
 
-    # --- Compute frozen bases ---
     means, modes = compute_bases(sub_trainers, x_flat, device)
 
-    # --- Sensor inputs ---
     u0_sensors_test  = u0_test[:, ::stride].to(device)
     s_true           = s_test.to(device)
 
@@ -280,15 +262,12 @@ def main():
             f"(Nx={Nx}, stride={stride})"
         )
 
-    # --- Train nu classifier on FULL u0 (no stride) ---
     # Classifier uses full-resolution u0 for better accuracy
     clf = train_classifier(u0_train, kappa_train, args.nu_values, device, epochs=args.clf_epochs)
 
-    # --- Predict nu for test set ---
     kappa_pred, clf_acc = eval_classifier(clf, u0_test, kappa_test, args.nu_values, device)
     kappa_pred = kappa_pred.to(device)
 
-    # --- Three kappa variants ---
     kappa_real = kappa_test.to(device)
     kappa_zero = torch.zeros_like(kappa_real)
 
@@ -302,7 +281,6 @@ def main():
     err_zero = rel_l2_vec(pred_zero, s_cpu)
     err_pred = rel_l2_vec(pred_pred, s_cpu)
 
-    # --- Results ---
     print(f"\n{'='*60}")
     print(f"=== KAPPA ABLATION: NeuralPOD M={M} Burgers' ===")
     print(f"    N_test={len(s_test)}, clf_acc={clf_acc*100:.1f}%")

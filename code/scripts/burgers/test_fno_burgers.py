@@ -2,7 +2,7 @@
 """Benchmark: neuraloperator FNO on full Burgers trajectory (nu=0.1).
 
 FNO 2D: u0(x) -> s(x, t) for all t in [0, T].
-Input grid: (N, 3, Nx, Nt) — channels: [u0 repeated, x-coord, t-coord]
+Input grid: (N, 3, Nx, Nt) - channels: [u0 repeated, x-coord, t-coord]
 Output:     (N, 1, Nx, Nt)
 
 Compare with our POD-DeepONet (nu=0.1, n_train=9000): mean=0.0480
@@ -50,15 +50,15 @@ np.random.seed(SEED)
 entries = [(NU, os.path.join(DATA_DIR, f"1D_Burgers_Sols_Nu{NU}.hdf5"))]
 s_np, kappa_np, x_np, t_np, Nx, Nt = load_stacked(entries, n_samples=N_SAMPLES)
 
-# s: (N, Nt*Nx) — reshape to (N, Nx, Nt)
+# s: (N, Nt*Nx) - reshape to (N, Nx, Nt)
 s_grid = s_np.reshape(-1, Nt, Nx).transpose(0, 2, 1)  # (N, Nx, Nt)
-u0     = s_grid[:, :, 0]                                # (N, Nx) — t=0 slice
+u0     = s_grid[:, :, 0]                                # (N, Nx) - t=0 slice
 
 print(f"s_grid={s_grid.shape}  u0={u0.shape}  Nx={Nx}  Nt={Nt}")
 
 # ── 2. Build coordinate grids ─────────────────────────────────────────────────
-# x_grid: (Nx, Nt) — x coordinate repeated along t
-# t_grid: (Nx, Nt) — t coordinate repeated along x
+# x_grid: (Nx, Nt) - x coordinate repeated along t
+# t_grid: (Nx, Nt) - t coordinate repeated along x
 xx = np.tile(x_np[:, None], (1, Nt)).astype(np.float32)   # (Nx, Nt)
 tt = np.tile(t_np[None, :], (Nx, 1)).astype(np.float32)   # (Nx, Nt)
 

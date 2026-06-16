@@ -53,7 +53,7 @@ def hdf5_path(name: str) -> str:
 
 def download(name: str) -> None:
     """Download dataset from HuggingFace and save as HDF5."""
-    from datasets import load_dataset  # imported lazily — only needed for download
+    from datasets import load_dataset  # imported lazily - only needed for download
 
     path = hdf5_path(name)
     if os.path.exists(path):
@@ -102,12 +102,7 @@ def load_stacked(
     entries: list[tuple[float, str]],
     n_samples: int = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]:
-    """Stack trajectory HDF5 files into a single pre-allocated array.
-
-    Reads only n_samples rows per file via HDF5 slicing — no full-file loads.
-
-    Returns: s (N_total, Nt*Nx), kappa (N_total,), x_np, t_np, Nx, Nt
-    """
+    """Stack trajectory HDF5 files into a pre-allocated array via HDF5 slicing. Returns s, kappa, x_np, t_np, Nx, Nt."""
     _, path0 = entries[0]
     with h5py.File(path0, "r") as f:
         shape = f["tensor"].shape           # (N_file, Nt, Nx) or (N_file, Nt, Nx, 1)
@@ -145,16 +140,7 @@ def load_darcy_stacked(
     entries: list[tuple[float, str]],
     n_samples: int = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]:
-    """Stack Darcy Flow HDF5 files into pre-allocated arrays.
-
-    Each file: nu (N, Nx, Ny) permeability input, tensor (N, 1, Nx, Ny) pressure output.
-
-    Returns: s (N_total, Nx*Ny), a (N_total, Nx*Ny), kappa (N_total,), xy (Nx*Ny, 2), Nx, Ny
-      s     - output pressure field u(x,y), flattened
-      a     - input permeability field a(x,y), flattened
-      kappa - beta value per sample
-      xy    - grid coordinates (Nx*Ny, 2) for NeuralPOD mode networks
-    """
+    """Stack Darcy Flow HDF5 files (pressure s, permeability a) into pre-allocated arrays. Returns s, a, kappa, xy, Nx, Ny."""
     _, path0 = entries[0]
     with h5py.File(path0, "r") as f:
         shape = f["tensor"].shape          # (N_file, 1, Nx, Ny)
@@ -195,17 +181,7 @@ def load_ns_stacked(
     entries: list[tuple[int, str]],
     n_samples: int = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int, int]:
-    """Stack 2D Navier-Stokes NPZ files into pre-allocated arrays.
-
-    Each file: velocity (N, Nt, Nx, Ny, 2) trajectories with 2 velocity components.
-
-    Returns:
-      s     (N_total, Nt*Nx*Ny*2) - full velocity trajectory flattened
-      u0    (N_total, Nx*Ny*2) - initial velocity field flattened
-      kappa (N_total,) - Reynolds number per sample
-      xy    (Nx*Ny, 2) - spatial grid coordinates
-      Nx, Ny, Nt - grid and time dimensions
-    """
+    """Stack 2D NS NPZ files into pre-allocated arrays. Returns s, u0, kappa, xy, Nx, Ny, Nt."""
     _MAX_PER_RE = 9500  # hard cap per Reynolds number
 
     _, path0 = entries[0]
@@ -274,17 +250,7 @@ def load_ns_1d_stacked(
     entries: list[tuple[int, str]],
     n_samples: int = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]:
-    """Stack 1D Navier-Stokes NPZ files into pre-allocated arrays.
-
-    Each file: velocity (N, Nt, Nx) trajectories.
-
-    Returns:
-      s     (N_total, Nt*Nx) - full velocity trajectory flattened
-      u0    (N_total, Nx) - initial velocity field
-      kappa (N_total,) - Reynolds number per sample
-      x_np  (Nx,) - spatial grid coordinates
-      Nx, Nt - grid and time dimensions
-    """
+    """Stack 1D NS NPZ files (velocity: N, Nt, Nx) into pre-allocated arrays. Returns s, u0, kappa, x_np, Nx, Nt."""
     _, path0 = entries[0]
     data0 = np.load(path0)
     vel0 = data0["velocity"]  # (N_file, Nt, Nx)
@@ -307,11 +273,7 @@ def load_ns_1d_stacked(
         data = np.load(path)
         vel = data["velocity"][:n_per]  # (n_per, Nt, Nx)
 
-        # Extract initial condition u0
-        u0_batch = vel[:, 0, :]  # (n_per, Nx)
-        u0_batch = u0_batch.astype(np.float32)
-
-        # Flatten full trajectory
+        u0_batch = vel[:, 0, :].astype(np.float32)
         s_batch = vel.reshape(n_per, Nxt).astype(np.float32)
 
         sl = slice(i * n_per, (i + 1) * n_per)
@@ -321,18 +283,13 @@ def load_ns_1d_stacked(
         del vel, u0_batch, s_batch
         print(f"  Re={re_val}: {n_per} trajectories loaded")
 
-    # Create spatial grid
     x_np = np.linspace(0, 1, Nx, dtype=np.float32)
 
     return s, u0, kappa, x_np, Nx, Nt
 
 
 def measure_inference_time(predict_fn, device, n_warmup=3, n_rep=10):
-    """
-    Measure inference time of predict_fn (already bound to test inputs).
-    Runs n_warmup passes (discarded), then n_rep timed passes.
-    Returns (mean_ms_per_call, ) — total ms for one full predict_fn() call.
-    """
+    """Measure mean inference time in ms over n_rep calls after n_warmup warmup passes."""
     import time
 
     def sync():
