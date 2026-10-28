@@ -1,4 +1,4 @@
-# TEMPO: Regime-Aware Operator Learning with Locally Adapted POD Bases
+# Regime-Aware Operator Learning
 -----
 
 [![License](https://badgen.net/github/license/intsystems/2026-Project-185?color=green)](https://github.com/intsystems/2026-Project-185/blob/main/LICENSE)
@@ -33,11 +33,4 @@
 
 ## Abstract
 
-Operator learning methods typically approximate the solution map of a physical system with a single global model — an assumption that fails when solutions change character fundamentally across the parameter space.
-
-We propose TEMPO: a framework that identifies latent dynamical regimes in snapshot data via Expectation-Maximization, builds a dedicated Neural-POD basis for each, and learns to route new inputs to the right regime at inference time. On multi-regime benchmarks, TEMPO achieves substantially lower errors than POD-DeepONet and vanilla DeepONet, with interpretable structure that reflects the underlying physics.
-
-
-## Keywords
-Operator learning, DeepONet, Proper Orthogonal Decomposition, Expectation-Maximization, Gaussian mixture models, Regime discovery
-
+Operator learning methods typically approximate the solution map of a physical system with a single global model — an assumption that fails when solutions change character fundamentally across the parameter space
